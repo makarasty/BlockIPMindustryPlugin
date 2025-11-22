@@ -14,7 +14,7 @@ import java.util.Set;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class ConfigManager {
-    private static final String MOD_NAME = "blockIp";
+    private static final String MOD_NAME = "blockip";
     private static final Fi CONFIG_DIR = Core.settings.getDataDirectory().child("mods").child(MOD_NAME);
     private static final Fi CONFIG_FILE = CONFIG_DIR.child("config.json");
     private static final Fi DB_FILE = CONFIG_DIR.child("ip.mmdb");
