@@ -1,8 +1,10 @@
 package BlockIp;
 
+import arc.Core;
 import arc.Events;
 import arc.util.CommandHandler;
 import arc.util.Log;
+import arc.util.Threads;
 import mindustry.game.EventType.ConnectionEvent;
 import mindustry.mod.Plugin;
 
@@ -22,14 +24,26 @@ public class BlockPlugin extends Plugin {
 
     private void handleConnection(ConnectionEvent event) {
         String uuid = event.connection.uuid;
+        String ip = event.connection.address;
+
         if (ConfigManager.isUuidWhitelisted(uuid)) {
             return;
         }
 
-        String ip = event.connection.address;
-        if (IpChecker.checkIp(ip)) {
-            event.connection.kick(ConfigManager.getKickText());
+        if (ConfigManager.isIpWhitelisted(ip)) {
+            return;
         }
+
+        Threads.daemon(() -> {
+            if (IpChecker.checkIp(ip)) {
+                Core.app.post(() -> {
+                    if (event.connection.isConnected()) {
+                        event.connection.kick(ConfigManager.getKickText());
+                        Log.info("Kicked connection @ (IP blocked)", ip);
+                    }
+                });
+            }
+        });
     }
 
     @Override

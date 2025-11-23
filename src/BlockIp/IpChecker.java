@@ -8,24 +8,28 @@ import java.net.InetAddress;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 
 public class IpChecker {
     private static final ConcurrentHashMap<String, Boolean> resultCache = new ConcurrentHashMap<>();
     private static final ConcurrentHashMap<String, InetAddress> addressCache = new ConcurrentHashMap<>();
 
     private static final long CACHE_TTL = TimeUnit.HOURS.toMillis(1);
-    private static long lastCacheClear = System.currentTimeMillis();
+    private static final AtomicLong lastCacheClear = new AtomicLong(System.currentTimeMillis());
 
     public static boolean checkIp(String ip) {
         if (ip == null) return false;
 
-        if (ConfigManager.isIpWhitelisted(ip)) return false;
-
         Boolean cachedBlock = resultCache.get(ip);
         if (cachedBlock != null) return cachedBlock;
 
-        if (System.currentTimeMillis() - lastCacheClear > CACHE_TTL) {
-            clearCache();
+        long now = System.currentTimeMillis();
+        long last = lastCacheClear.get();
+
+        if (now - last > CACHE_TTL) {
+            if (lastCacheClear.compareAndSet(last, now)) {
+                clearCache();
+            }
         }
 
         boolean shouldBlock = resolveBlockStatus(ip);
@@ -35,21 +39,20 @@ public class IpChecker {
     }
 
     private static boolean resolveBlockStatus(String ip) {
-        ConfigManager.getLock().readLock().lock();
-        Reader reader = ConfigManager.getDbReader();
-
-        try {
-            if (reader == null) return false;
-
-            InetAddress addr = addressCache.get(ip);
-            if (addr == null) {
-                try {
-                    addr = InetAddress.getByName(ip);
-                    addressCache.put(ip, addr);
-                } catch (Exception e) {
-                    return false;
-                }
+        InetAddress addr = addressCache.get(ip);
+        if (addr == null) {
+            try {
+                addr = InetAddress.getByName(ip);
+                addressCache.put(ip, addr);
+            } catch (Exception e) {
+                return false;
             }
+        }
+
+        ConfigManager.getLock().readLock().lock();
+        try {
+            Reader reader = ConfigManager.getDbReader();
+            if (reader == null) return false;
 
             @SuppressWarnings("unchecked") Map<String, Object> result = (Map<String, Object>) reader.get(addr, Map.class);
 
@@ -75,6 +78,5 @@ public class IpChecker {
     public static void clearCache() {
         resultCache.clear();
         addressCache.clear();
-        lastCacheClear = System.currentTimeMillis();
     }
 }
