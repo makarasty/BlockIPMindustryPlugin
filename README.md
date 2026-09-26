@@ -1,8 +1,8 @@
 # BlockIp Plugin for Mindustry
 
-A high-performance, thread-safe plugin for Mindustry servers that provides advanced access control through GeoIP blocking and whitelisting.
+A lightweight plugin for Mindustry servers that provides advanced access control through GeoIP blocking and whitelisting.
 
-This plugin is designed to handle high-traffic servers with **zero lag** on the main thread, using intelligent caching and asynchronous-friendly locking mechanisms.
+The check runs once per join attempt, on the main thread, against a memory-mapped database: no worker threads, no locks, no per-IP cache to grow during a join flood.
 
 ## 🚀 Key Features
 
@@ -10,11 +10,10 @@ This plugin is designed to handle high-traffic servers with **zero lag** on the 
 *   **Dual Whitelisting:**
     *   **IP Whitelist:** Allow specific IP addresses to bypass country checks.
     *   **UUID Whitelist:** Allow specific player UUIDs to bypass all checks (ideal for players with dynamic IPs).
-*   **Zero-Latency Checks:**
-    *   **Smart Caching:** Uses `ConcurrentHashMap` to cache results for 1 hour. Repeated connections do not touch the disk or database.
-    *   **Memory-Mapped IO:** fast database reading directly from RAM.
-    *   **No DNS Lookups:** Validates IP patterns via Regex/Parsing to avoid thread-blocking DNS queries.
-*   **Thread Safe:** Built with `ReadWriteLock` architecture, allowing safe hot-reloading of the configuration while players are connecting.
+*   **Cheap Checks:**
+    *   **Memory-Mapped IO:** the database is read through the OS page cache, not loaded onto the heap; the reader keeps a small cache of decoded records.
+    *   **No DNS Lookups:** addresses are parsed as IP literals, so a lookup never blocks on the network.
+    *   **Kicked Before Joining:** a blocked client is kicked while its connect packet is handled, before the server creates a player.
 
 ## 🔨 Building from Source
 
@@ -87,7 +86,7 @@ All commands are intended for the **Server Console**.
 
 | Command | Arguments | Description |
 | :--- | :--- | :--- |
-| `blockipreload` | *(none)* | Reloads `config.json` and `ip.mmdb`. Clears the internal cache. |
+| `blockipreload` | *(none)* | Reloads `config.json` and `ip.mmdb`. |
 | `addcountry` | `<country_code>` | Adds a 2-letter code to the blocklist (e.g., `addcountry US`). |
 | `removecountry` | `<country_code>` | Removes a country code from the blocklist. |
 | `addwhitelist` | `<ip>` | Adds an IP address to the whitelist. |

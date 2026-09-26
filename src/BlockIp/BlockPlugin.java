@@ -1,10 +1,8 @@
 package BlockIp;
 
-import arc.Core;
 import arc.Events;
 import arc.util.CommandHandler;
 import arc.util.Log;
-import arc.util.Threads;
 import mindustry.game.EventType.ConnectPacketEvent;
 import mindustry.mod.Plugin;
 
@@ -24,27 +22,15 @@ public class BlockPlugin extends Plugin {
     }
 
     private void handleConnection(ConnectPacketEvent event) {
-        String uuid = event.packet.uuid;
         String ip = event.connection.address;
+        if (ConfigManager.isUuidWhitelisted(event.packet.uuid) || ConfigManager.isIpWhitelisted(ip)) return;
 
-        if (ConfigManager.isUuidWhitelisted(uuid)) {
-            return;
+        // Checked inline: NetServer stops handling a connection kicked here, so a blocked
+        // client never gets further, and no thread is started per connection
+        if (IpChecker.isBlocked(ip)) {
+            event.connection.kick(ConfigManager.getKickText());
+            Log.info("Kicked connection @ (IP blocked)", ip);
         }
-
-        if (ConfigManager.isIpWhitelisted(ip)) {
-            return;
-        }
-
-        Threads.daemon(() -> {
-            if (IpChecker.checkIp(ip)) {
-                Core.app.post(() -> {
-                    if (event.connection.isConnected()) {
-                        event.connection.kick(ConfigManager.getKickText());
-                        Log.info("Kicked connection @ (IP blocked)", ip);
-                    }
-                });
-            }
-        });
     }
 
     @Override

@@ -3,80 +3,30 @@ package BlockIp;
 import arc.util.Log;
 import com.maxmind.db.Reader;
 
-import java.io.IOException;
 import java.net.InetAddress;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicLong;
 
 public class IpChecker {
-    private static final ConcurrentHashMap<String, Boolean> resultCache = new ConcurrentHashMap<>();
-    private static final ConcurrentHashMap<String, InetAddress> addressCache = new ConcurrentHashMap<>();
 
-    private static final long CACHE_TTL = TimeUnit.HOURS.toMillis(1);
-    private static final AtomicLong lastCacheClear = new AtomicLong(System.currentTimeMillis());
+    /**
+     * Runs on the main thread. The database is memory-mapped and the Reader caches decoded records,
+     * so a lookup costs microseconds and needs no cache or worker thread of its own.
+     */
+    @SuppressWarnings("unchecked")
+    public static boolean isBlocked(String ip) {
+        Reader reader = ConfigManager.getDbReader();
+        // "steam:" addresses are not IP literals, and getByName would resolve them over DNS on the main thread
+        if (reader == null || ip == null || ip.startsWith("steam:")) return false;
 
-    public static boolean checkIp(String ip) {
-        if (ip == null) return false;
-
-        Boolean cachedBlock = resultCache.get(ip);
-        if (cachedBlock != null) return cachedBlock;
-
-        long now = System.currentTimeMillis();
-        long last = lastCacheClear.get();
-
-        if (now - last > CACHE_TTL) {
-            if (lastCacheClear.compareAndSet(last, now)) {
-                clearCache();
-            }
-        }
-
-        boolean shouldBlock = resolveBlockStatus(ip);
-
-        resultCache.put(ip, shouldBlock);
-        return shouldBlock;
-    }
-
-    private static boolean resolveBlockStatus(String ip) {
-        InetAddress addr = addressCache.get(ip);
-        if (addr == null) {
-            try {
-                addr = InetAddress.getByName(ip);
-                addressCache.put(ip, addr);
-            } catch (Exception e) {
-                return false;
-            }
-        }
-
-        ConfigManager.getLock().readLock().lock();
         try {
-            Reader reader = ConfigManager.getDbReader();
-            if (reader == null) return false;
-
-            @SuppressWarnings("unchecked") Map<String, Object> result = (Map<String, Object>) reader.get(addr, Map.class);
-
+            Map<String, Object> result = reader.get(InetAddress.getByName(ip), Map.class);
             if (result == null) return false;
 
-            @SuppressWarnings("unchecked") Map<String, Object> country = (Map<String, Object>) result.get("country");
-            if (country != null) {
-                String isoCode = (String) country.get("iso_code");
-                return ConfigManager.isCountryBlocked(isoCode);
-            }
-
-        } catch (IOException e) {
-            Log.err("Error reading GeoIP DB", e);
+            Map<String, Object> country = (Map<String, Object>) result.get("country");
+            return country != null && ConfigManager.isCountryBlocked((String) country.get("iso_code"));
         } catch (Exception e) {
-            Log.err("Unexpected error in IpChecker", e);
-        } finally {
-            ConfigManager.getLock().readLock().unlock();
+            Log.err("BlockIp: GeoIP lookup failed for " + ip, e);
+            return false;
         }
-
-        return false;
-    }
-
-    public static void clearCache() {
-        resultCache.clear();
-        addressCache.clear();
     }
 }
