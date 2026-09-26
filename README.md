@@ -11,7 +11,7 @@ It replaces BotEradicator; remove `BotEradicator.jar` when installing this. Two 
 
 *   **Flood Limits:** more than `maxConnectionsPerIp` connections in `connectionWindowMs` blocks the address for `blockSeconds`, refused at accept.
 *   **Player Cap per Address:** at most `maxPlayersPerIp` players from one address at a time.
-*   **Hosting / VPN Blocking** (off by default): the [X4BNet](https://github.com/X4BNet/lists_vpn) datacenter and VPN lists, downloaded once a day into `config/mods/blockip/vpn-ipv4.txt` and read from there on restart. A failed download keeps the last good copy.
+*   **Hosting / VPN Blocking, only when it is needed:** the [X4BNet](https://github.com/X4BNet/lists_vpn) datacenter and VPN lists, downloaded once a day into `config/mods/blockip/vpn-ipv4.txt` and read from there on restart (a failed download keeps the last good copy). In the default `auto` mode a VPN player can join a quiet server; VPN joins are refused only while `vpnMinPlayers` are online, or for `vpnBurstHoldMinutes` after `vpnBurstJoins` VPN joins arrive within `vpnBurstSeconds` - and the VPN players who joined during that burst are kicked when it trips. `always` refuses every VPN address, `off` never looks. IPv4 only: the published lists have no IPv6.
 *   **GeoIP Blocking:** Automatically kick players connecting from specific countries using the MaxMind GeoLite2 database.
 *   **Refused Means Refused for a While:** an address kicked for its VPN or country is also blocked at accept for `blockSeconds`, so its retries cost nothing.
 *   **Dual Whitelisting:**
@@ -75,7 +75,11 @@ When generated, the file looks like this:
 "ipWhiteList": [],
 "uuidWhiteList": [],
 "kickText": "Your country is blocked on this server.",
-"blockVpn": false,
+"vpnMode": "auto",
+"vpnMinPlayers": 10,
+"vpnBurstJoins": 5,
+"vpnBurstSeconds": 60,
+"vpnBurstHoldMinutes": 10,
 "vpnLists": [
 	"https://raw.githubusercontent.com/X4BNet/lists_vpn/main/output/datacenter/ipv4.txt",
 	"https://raw.githubusercontent.com/X4BNet/lists_vpn/main/output/vpn/ipv4.txt"
@@ -100,7 +104,11 @@ A file written by an older version gets the new keys added, with these defaults,
 | `ipWhiteList` | Array | IPs that skip every check, flood limits included (e.g., a shared NAT address). |
 | `uuidWhiteList` | Array | Mindustry Client UUIDs that skip the join checks (country, VPN, player cap). |
 | `kickText` | String | The message shown to a player from a blocked country. |
-| `blockVpn` | Boolean | Refuse hosting and VPN networks. Off by default: it also turns away players on a VPN. |
+| `vpnMode` | String | `off`, `auto` or `always`, see Hosting / VPN Blocking above. A value it does not know means `auto`. |
+| `vpnMinPlayers` | Number | In `auto`, VPN joins are refused while at least this many players are online; `0` turns this rule off. |
+| `vpnBurstJoins` | Number | In `auto`, this many VPN join attempts within `vpnBurstSeconds` start refusing VPN joins; `0` turns bursts off. |
+| `vpnBurstSeconds` | Number | The window a burst is counted in. |
+| `vpnBurstHoldMinutes` | Number | How long VPN joins stay refused after the last burst. |
 | `vpnLists` | Array | Sources for the VPN list: `http(s)://` or `file:` URLs of `a.b.c.d/nn` lines. |
 | `vpnListRefreshHours` | Number | How old the cached list may get before it is downloaded again. |
 | `vpnKickText` | String | The message shown to a player on a listed network. |
@@ -117,7 +125,7 @@ All commands are intended for the **Server Console**.
 | Command | Arguments | Description |
 | :--- | :--- | :--- |
 | `blockipreload` | *(none)* | Reloads `config.json` and `ip.mmdb`, and downloads the VPN list again when it is on. |
-| `blockipstats` | *(none)* | Shows the VPN list size, GeoIP status, blocked addresses and whether the connect filter is installed. |
+| `blockipstats` | *(none)* | Shows the VPN mode and whether a burst is on, the list size, GeoIP status, blocked addresses and whether the connect filter is installed. |
 | `addcountry` | `<country_code>` | Adds a 2-letter code to the blocklist (e.g., `addcountry US`). |
 | `removecountry` | `<country_code>` | Removes a country code from the blocklist. |
 | `addwhitelist` | `<ip>` | Adds an IP address to the whitelist. |

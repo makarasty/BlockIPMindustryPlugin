@@ -43,7 +43,7 @@ class ConfigDataTest {
         assertTrue(data.blockedCountries.contains("RU"));
         assertTrue(data.ipWhiteList.contains("1.2.3.4"));
         assertEquals("Nope", data.kickText);
-        assertFalse(data.blockVpn);
+        assertEquals(VpnGuard.Mode.auto, data.mode());
         assertEquals(2, data.maxPlayersPerIp);
         assertEquals(4, data.maxConnectionsPerIp);
     }

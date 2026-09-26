@@ -51,8 +51,17 @@ public class ConfigManager {
         public HashSet<String> uuidWhiteList = new HashSet<>();
         public String kickText = "Your country is blocked on this server.";
 
-        /** Refuse hosting and VPN networks. Off by default: it also turns away players on a VPN. */
-        public boolean blockVpn = false;
+        /**
+         * Hosting and VPN networks: "off"; "auto" refuses them only while at least vpnMinPlayers are
+         * online or a burst of VPN joins says an attack is on, so a lone VPN player can join a quiet
+         * server; "always" refuses them outright.
+         */
+        public String vpnMode = "auto";
+        public int vpnMinPlayers = 10;
+        /** This many VPN join attempts within vpnBurstSeconds turn VPN refusal on for vpnBurstHoldMinutes; 0 turns bursts off. */
+        public int vpnBurstJoins = 5;
+        public int vpnBurstSeconds = 60;
+        public int vpnBurstHoldMinutes = 10;
         public ArrayList<String> vpnLists = new ArrayList<>(List.of(
                 "https://raw.githubusercontent.com/X4BNet/lists_vpn/main/output/datacenter/ipv4.txt",
                 "https://raw.githubusercontent.com/X4BNet/lists_vpn/main/output/vpn/ipv4.txt"));
@@ -73,6 +82,10 @@ public class ConfigManager {
          * A key written as null reads back as null, and a null kick text reaches NetConnection.kick,
          * which throws on it inside the connect handler. Nulls take the defaults instead.
          */
+        VpnGuard.Mode mode() {
+            return VpnGuard.Mode.parse(vpnMode);
+        }
+
         void repairNulls() {
             ConfigData defaults = new ConfigData();
             if (blockedCountries == null) blockedCountries = defaults.blockedCountries;
@@ -82,6 +95,7 @@ public class ConfigManager {
             if (kickText == null) kickText = defaults.kickText;
             if (vpnKickText == null) vpnKickText = defaults.vpnKickText;
             if (duplicateKickText == null) duplicateKickText = defaults.duplicateKickText;
+            if (vpnMode == null) vpnMode = defaults.vpnMode;
             blockedCountries.remove(null);
             ipWhiteList.remove(null);
             uuidWhiteList.remove(null);
@@ -92,6 +106,7 @@ public class ConfigManager {
     static ConfigData settings() {
         return data;
     }
+
 
     public static void load() throws IOException {
         if (!CONFIG_DIR.exists()) CONFIG_DIR.mkdirs();

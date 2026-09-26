@@ -4,6 +4,7 @@ import arc.Events;
 import arc.net.Server.ServerConnectFilter;
 import arc.util.CommandHandler;
 import arc.util.Log;
+import arc.util.Time;
 import arc.util.Timer;
 import mindustry.Vars;
 import mindustry.game.EventType.ConnectPacketEvent;
@@ -15,6 +16,8 @@ public class BlockPlugin extends Plugin {
     // Main thread only, reported and reset by the minute summary
     private int kickedCountry, kickedVpn, kickedDuplicate;
     private Filter filter;
+    private final VpnGuard vpnGuard = new VpnGuard();
+    private boolean vpnAttackLogged;
 
     @Override
     public void init() {
@@ -54,21 +57,46 @@ public class BlockPlugin extends Plugin {
             return;
         }
 
-        String reason, kind;
-        if (config.blockVpn && VpnList.contains(ip)) {
-            reason = config.vpnKickText;
-            kind = "VPN";
-            kickedVpn++;
-        } else if (IpChecker.isBlocked(ip)) {
-            reason = config.kickText;
-            kind = "country";
-            kickedCountry++;
-        } else {
+        if (config.mode() != VpnGuard.Mode.off && VpnList.contains(ip)) {
+            long now = Time.millis();
+            VpnGuard.Reason why = vpnGuard.check(config, now, Groups.player.size());
+            if (vpnGuard.attackStarted()) onVpnAttack(config, now);
+            if (why != null) {
+                kickedVpn++;
+                refuse(event, config, config.vpnKickText, "VPN, " + why);
+            }
             return;
         }
+
+        if (IpChecker.isBlocked(ip)) {
+            kickedCountry++;
+            refuse(event, config, config.kickText, "country");
+        }
+    }
+
+    private static void refuse(ConnectPacketEvent event, ConfigManager.ConfigData config, String reason, String kind) {
+        String ip = event.connection.address;
         event.connection.kick(reason);
         FloodGuard.block(ip, System.currentTimeMillis() + config.blockSeconds * 1000L);
         Log.info("BlockIp: kicked @ (@), blocked for @s", ip, kind, config.blockSeconds);
+    }
+
+    /**
+     * A burst of VPN joins turned refusal on. The joins that made up the burst got in before it
+     * tripped, and are most likely the first of the bots: those still online are kicked too.
+     */
+    private void onVpnAttack(ConfigManager.ConfigData config, long now) {
+        long since = now - config.vpnBurstSeconds * 1000L;
+        int[] kicked = {0};
+        Groups.player.each(p -> p.con != null && p.con.connectTime >= since && VpnList.contains(p.ip())
+                        && !ConfigManager.isUuidWhitelisted(p.uuid()) && !ConfigManager.isIpWhitelisted(p.ip()),
+                p -> {
+                    p.kick(config.vpnKickText);
+                    kicked[0]++;
+                });
+        vpnAttackLogged = true;
+        Log.warn("BlockIp: @ VPN joins within @s, refusing VPN connections for @ min; kicked @ who had just joined",
+                config.vpnBurstJoins, config.vpnBurstSeconds, config.vpnBurstHoldMinutes, kicked[0]);
     }
 
     /**
@@ -113,6 +141,11 @@ public class BlockPlugin extends Plugin {
             installFilter();
         }
 
+        if (vpnAttackLogged && !vpnGuard.underAttack(Time.millis())) {
+            vpnAttackLogged = false;
+            Log.info("BlockIp: no VPN burst for @ min, VPN connections follow the normal rules again", ConfigManager.settings().vpnBurstHoldMinutes);
+        }
+
         int refused = FloodGuard.refused.getAndSet(0);
         if (refused + kickedCountry + kickedVpn + kickedDuplicate > 0) {
             Log.info("BlockIp: last minute refused @ connections at accept, kicked @ by country, @ as VPN, @ as duplicates",
@@ -123,7 +156,7 @@ public class BlockPlugin extends Plugin {
 
     private void refreshVpnList(boolean force) {
         ConfigManager.ConfigData config = ConfigManager.settings();
-        if (config.blockVpn) {
+        if (config.mode() != VpnGuard.Mode.off) {
             VpnList.refresh(config.vpnLists, ConfigManager.VPN_CACHE, config.vpnListRefreshHours * 3_600_000L, force);
         } else {
             VpnList.clear();
@@ -143,8 +176,8 @@ public class BlockPlugin extends Plugin {
         });
 
         handler.register("blockipstats", "Show what BlockIp is holding", args -> Log.info(
-                "BlockIp: VPN blocking @ (@ ranges), GeoIP database @, @ addresses blocked at accept, connect filter @",
-                ConfigManager.settings().blockVpn ? "on" : "off", VpnList.size(),
+                "BlockIp: VPN mode @@ (@ ranges), GeoIP database @, @ addresses blocked at accept, connect filter @",
+                ConfigManager.settings().mode(), vpnGuard.underAttack(Time.millis()) ? ", VPN burst in progress" : "", VpnList.size(),
                 ConfigManager.getDbReader() != null ? "loaded" : "missing", FloodGuard.blockedCount(),
                 filter != null && Vars.net.getConnectFilter() == filter ? "installed" : "not installed"));
 
