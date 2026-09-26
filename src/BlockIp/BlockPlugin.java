@@ -80,11 +80,13 @@ public class BlockPlugin extends Plugin {
 
         if (config.mode() != VpnGuard.Mode.off && VpnList.contains(ip)) {
             long now = Time.millis();
+            // Proved to be a person from this address recently: let in outside attack mode, and not counted
+            // toward a burst - several regulars reconnecting after a restart are not an attack
+            boolean passed = challenge.hasPassed(uuid, ip, now);
+            if (passed && !vpnGuard.underAttack(now)) return;
             VpnGuard.Reason why = vpnGuard.check(config, ip, now, Groups.player.size());
             if (vpnGuard.attackStarted()) onVpnAttack(config, now);
             if (why != null && why != VpnGuard.Reason.attack) {
-                // Proved to be a person from this address recently; attack mode does not honour that
-                if (challenge.hasPassed(uuid, ip, now)) return;
                 if (config.vpnChallenge && challenge.expect(uuid, now)) {
                     // Let in and asked once joined; too many waiting at once falls through to refusal
                     challenged++;
@@ -125,7 +127,8 @@ public class BlockPlugin extends Plugin {
         long since = now - config.vpnBurstSeconds * 1000L;
         int[] kicked = {0};
         Groups.player.each(p -> p.con != null && p.con.connectTime >= since && VpnList.contains(p.ip())
-                        && !ConfigManager.isUuidWhitelisted(p.uuid()) && !ConfigManager.isIpWhitelisted(p.ip()),
+                        && !ConfigManager.isUuidWhitelisted(p.uuid()) && !ConfigManager.isIpWhitelisted(p.ip())
+                        && !challenge.hasPassed(p.uuid(), p.ip(), now),
                 p -> {
                     p.kick(config.vpnKickText);
                     kicked[0]++;
