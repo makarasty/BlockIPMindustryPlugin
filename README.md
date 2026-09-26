@@ -33,7 +33,7 @@ To compile the plugin yourself, you need a Java Development Kit (JDK) installed 
     `build/libs/`
 
 > **⚠️ Important for Developers:**
-> This plugin relies on **Jackson** (`jackson-databind`) and **MaxMind** (`maxmind-db`) libraries. Your `build.gradle` must be configured to **shadow (shade)** these dependencies into the final JAR file, otherwise the plugin will crash with `NoClassDefFoundError` at runtime.
+> This plugin relies on the **MaxMind** (`maxmind-db`) library. Your `build.gradle` must be configured to **shadow (shade)** it into the final JAR file, otherwise the plugin will crash with `NoClassDefFoundError` at runtime.
 
 ## 📥 Installation
 

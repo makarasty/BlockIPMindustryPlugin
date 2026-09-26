@@ -3,14 +3,14 @@ package BlockIp;
 import arc.Core;
 import arc.files.Fi;
 import arc.util.Log;
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import arc.util.serialization.Json;
+import arc.util.serialization.JsonWriter.OutputType;
+import arc.util.serialization.SerializationException;
 import com.maxmind.db.Reader;
 
 import java.io.File;
 import java.io.IOException;
 import java.util.HashSet;
-import java.util.Set;
 
 /**
  * No locking: the connect handler, init and the console commands all run on the main thread
@@ -22,16 +22,22 @@ public class ConfigManager {
     private static final Fi CONFIG_FILE = CONFIG_DIR.child("config.json");
     private static final Fi DB_FILE = CONFIG_DIR.child("ip.mmdb");
 
-    private static final ObjectMapper mapper = new ObjectMapper();
+    // Arc's own Json instead of a bundled Jackson: nothing extra on the classpath or in metaspace
+    private static final Json json = new Json(OutputType.json);
+
+    static {
+        json.setIgnoreUnknownFields(true);
+        json.setUsePrototypes(false); // write every key, even at its default, so the file shows what can be set
+    }
 
     private static ConfigData data = new ConfigData();
     private static Reader dbReader;
 
-    @JsonIgnoreProperties(ignoreUnknown = true)
+    // Concrete HashSet: Arc's Json fills an interface-typed collection field with an ArrayList
     public static class ConfigData {
-        public Set<String> blockedCountries = new HashSet<>();
-        public Set<String> ipWhiteList = new HashSet<>();
-        public Set<String> uuidWhiteList = new HashSet<>();
+        public HashSet<String> blockedCountries = new HashSet<>();
+        public HashSet<String> ipWhiteList = new HashSet<>();
+        public HashSet<String> uuidWhiteList = new HashSet<>();
         public String kickText = "Your country is blocked on this server.";
     }
 
@@ -40,11 +46,11 @@ public class ConfigManager {
 
         if (CONFIG_FILE.exists()) {
             try {
-                data = mapper.readValue(CONFIG_FILE.file(), ConfigData.class);
+                data = json.fromJson(ConfigData.class, CONFIG_FILE);
                 if (data.ipWhiteList == null) data.ipWhiteList = new HashSet<>();
                 if (data.uuidWhiteList == null) data.uuidWhiteList = new HashSet<>();
                 if (data.blockedCountries == null) data.blockedCountries = new HashSet<>();
-            } catch (IOException e) {
+            } catch (SerializationException e) {
                 Log.err("Failed to parse config, creating backup and resetting", e);
                 CONFIG_FILE.moveTo(CONFIG_DIR.child("config_backup_" + System.currentTimeMillis() + ".json"));
                 data = new ConfigData();
@@ -72,8 +78,8 @@ public class ConfigManager {
 
     private static void save() {
         try {
-            mapper.writerWithDefaultPrettyPrinter().writeValue(CONFIG_FILE.file(), data);
-        } catch (IOException e) {
+            CONFIG_FILE.writeString(json.prettyPrint(data));
+        } catch (Exception e) {
             Log.err("Failed to save config", e);
         }
     }
