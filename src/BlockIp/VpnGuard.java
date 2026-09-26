@@ -1,6 +1,7 @@
 package BlockIp;
 
 import java.util.ArrayDeque;
+import java.util.Iterator;
 import java.util.Locale;
 
 /**
@@ -26,34 +27,51 @@ final class VpnGuard {
     /** Why a join was refused. */
     enum Reason {always, busy, attack}
 
-    /** Times of recent VPN join attempts, oldest first, never more than the burst threshold. */
-    private final ArrayDeque<Long> recent = new ArrayDeque<>();
+    private static final class Join {
+        final String address;
+        final long time;
+
+        Join(String address, long time) {
+            this.address = address;
+            this.time = time;
+        }
+    }
+
+    /** Recent VPN joins that were let in, oldest first, one per address, never more than the burst threshold. */
+    private final ArrayDeque<Join> recent = new ArrayDeque<>();
     private long attackUntil;
     private boolean started;
 
     /**
-     * Called for every join attempt from a listed address, allowed or not: those attempts are what a
-     * burst is counted from. Returns why to refuse it, or null to let it in.
+     * Called for every join attempt from a listed address. Returns why to refuse it, or null to let it in.
+     *
+     * A burst is counted from the joins that would have been let in, one per address: a refused attempt
+     * does not count, so an attacker cannot hold attack mode open by retrying, and one player reconnecting
+     * over and over is one address, not a burst. Attack mode lasts the hold time and then ends; a new
+     * burst starts it again.
      */
-    Reason check(ConfigManager.ConfigData config, long now, int online) {
+    Reason check(ConfigManager.ConfigData config, String address, long now, int online) {
         Mode mode = config.mode();
         if (mode == Mode.always) return Reason.always;
         if (mode != Mode.auto) return null;
 
-        if (config.vpnBurstJoins > 0) {
-            long window = config.vpnBurstSeconds * 1000L;
-            while (!recent.isEmpty() && now - recent.peekFirst() > window) recent.pollFirst();
-            recent.addLast(now);
-            while (recent.size() > config.vpnBurstJoins) recent.pollFirst();
-            if (recent.size() >= config.vpnBurstJoins) {
-                if (now >= attackUntil) started = true;
-                attackUntil = now + config.vpnBurstHoldMinutes * 60_000L;
-            }
-        }
-
         if (now < attackUntil) return Reason.attack;
         if (config.vpnMinPlayers > 0 && online >= config.vpnMinPlayers) return Reason.busy;
-        return null;
+        if (config.vpnBurstJoins <= 0) return null;
+
+        long window = config.vpnBurstSeconds * 1000L;
+        while (!recent.isEmpty() && now - recent.peekFirst().time > window) recent.pollFirst();
+        for (Iterator<Join> it = recent.iterator(); it.hasNext(); ) {
+            if (it.next().address.equals(address)) it.remove();
+        }
+        recent.addLast(new Join(address, now));
+        while (recent.size() > config.vpnBurstJoins) recent.pollFirst();
+
+        if (recent.size() < config.vpnBurstJoins) return null;
+        recent.clear();
+        attackUntil = now + config.vpnBurstHoldMinutes * 60_000L;
+        started = true;
+        return Reason.attack;
     }
 
     /** True once, after the check that switched attack mode on. */

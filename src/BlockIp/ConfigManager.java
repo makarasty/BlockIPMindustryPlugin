@@ -59,7 +59,7 @@ public class ConfigManager {
         public String vpnMode = "auto";
         public int vpnMinPlayers = 10;
         /** This many VPN join attempts within vpnBurstSeconds turn VPN refusal on for vpnBurstHoldMinutes; 0 turns bursts off. */
-        public int vpnBurstJoins = 5;
+        public int vpnBurstJoins = 8;
         public int vpnBurstSeconds = 60;
         public int vpnBurstHoldMinutes = 10;
         public ArrayList<String> vpnLists = new ArrayList<>(List.of(

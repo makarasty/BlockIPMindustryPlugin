@@ -77,7 +77,7 @@ When generated, the file looks like this:
 "kickText": "Your country is blocked on this server.",
 "vpnMode": "auto",
 "vpnMinPlayers": 10,
-"vpnBurstJoins": 5,
+"vpnBurstJoins": 8,
 "vpnBurstSeconds": 60,
 "vpnBurstHoldMinutes": 10,
 "vpnLists": [
@@ -106,9 +106,9 @@ A file written by an older version gets the new keys added, with these defaults,
 | `kickText` | String | The message shown to a player from a blocked country. |
 | `vpnMode` | String | `off`, `auto` or `always`, see Hosting / VPN Blocking above. A value it does not know means `auto`. |
 | `vpnMinPlayers` | Number | In `auto`, VPN joins are refused while at least this many players are online; `0` turns this rule off. |
-| `vpnBurstJoins` | Number | In `auto`, this many VPN join attempts within `vpnBurstSeconds` start refusing VPN joins; `0` turns bursts off. |
+| `vpnBurstJoins` | Number | In `auto`, VPN joins from this many different addresses within `vpnBurstSeconds` start refusing VPN joins; `0` turns bursts off. Only joins that would have been let in count, so retries during a refusal cannot hold it open. |
 | `vpnBurstSeconds` | Number | The window a burst is counted in. |
-| `vpnBurstHoldMinutes` | Number | How long VPN joins stay refused after the last burst. |
+| `vpnBurstHoldMinutes` | Number | How long VPN joins stay refused once a burst trips; a new burst after that trips it again. |
 | `vpnLists` | Array | Sources for the VPN list: `http(s)://` or `file:` URLs of `a.b.c.d/nn` lines. |
 | `vpnListRefreshHours` | Number | How old the cached list may get before it is downloaded again. |
 | `vpnKickText` | String | The message shown to a player on a listed network. |

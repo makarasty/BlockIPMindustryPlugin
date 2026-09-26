@@ -59,9 +59,13 @@ public class BlockPlugin extends Plugin {
 
         if (config.mode() != VpnGuard.Mode.off && VpnList.contains(ip)) {
             long now = Time.millis();
-            VpnGuard.Reason why = vpnGuard.check(config, now, Groups.player.size());
+            VpnGuard.Reason why = vpnGuard.check(config, ip, now, Groups.player.size());
             if (vpnGuard.attackStarted()) onVpnAttack(config, now);
-            if (why != null) {
+            if (why == VpnGuard.Reason.busy) {
+                // The server being full says nothing about this address: no block, it may retry once a slot frees
+                kickedVpn++;
+                event.connection.kick(config.vpnKickText);
+            } else if (why != null) {
                 kickedVpn++;
                 refuse(event, config, config.vpnKickText, "VPN, " + why);
             }
