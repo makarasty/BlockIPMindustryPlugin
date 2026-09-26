@@ -28,12 +28,23 @@ class VpnGuardTest {
     }
 
     @Test
-    void aBusyServerRefusesVpnJoinsWithoutCountingThemAsABurst() {
+    void aBusyServerRefusesVpnJoins() {
         VpnGuard guard = new VpnGuard();
         ConfigManager.ConfigData config = config("auto");
-        for (int i = 0; i < 10; i++) assertEquals(VpnGuard.Reason.busy, guard.check(config, "2.2.2." + i, i, 10));
+        assertEquals(VpnGuard.Reason.busy, guard.check(config, "2.2.2.1", 0, 10));
+        assertEquals(VpnGuard.Reason.busy, guard.check(config, "2.2.2.1", 1, 10));
         assertFalse(guard.attackStarted());
-        assertNull(guard.check(config, "2.2.2.99", 20, 9));
+        assertNull(guard.check(config, "2.2.2.1", 2, 9));
+    }
+
+    @Test
+    void aFloodOfAddressesAtABusyServerStillEscalates() {
+        VpnGuard guard = new VpnGuard();
+        ConfigManager.ConfigData config = config("auto");
+        assertEquals(VpnGuard.Reason.busy, guard.check(config, "2.2.3.1", 0, 10));
+        assertEquals(VpnGuard.Reason.busy, guard.check(config, "2.2.3.2", 1, 10));
+        assertEquals(VpnGuard.Reason.attack, guard.check(config, "2.2.3.3", 2, 10));
+        assertTrue(guard.attackStarted());
     }
 
     @Test

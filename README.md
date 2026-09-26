@@ -106,7 +106,7 @@ A file written by an older version gets the new keys added, with these defaults,
 | `kickText` | String | The message shown to a player from a blocked country. |
 | `vpnMode` | String | `off`, `auto` or `always`, see Hosting / VPN Blocking above. A value it does not know means `auto`. |
 | `vpnMinPlayers` | Number | In `auto`, VPN joins are refused while at least this many players are online; `0` turns this rule off. |
-| `vpnBurstJoins` | Number | In `auto`, VPN joins from this many different addresses within `vpnBurstSeconds` start refusing VPN joins; `0` turns bursts off. Only joins that would have been let in count, so retries during a refusal cannot hold it open. |
+| `vpnBurstJoins` | Number | In `auto`, VPN joins from this many different addresses within `vpnBurstSeconds` start refusing VPN joins; `0` turns bursts off. Attempts refused by attack mode itself do not count, so retrying cannot hold it open. |
 | `vpnBurstSeconds` | Number | The window a burst is counted in. |
 | `vpnBurstHoldMinutes` | Number | How long VPN joins stay refused once a burst trips; a new burst after that trips it again. |
 | `vpnLists` | Array | Sources for the VPN list: `http(s)://` or `file:` URLs of `a.b.c.d/nn` lines. |
