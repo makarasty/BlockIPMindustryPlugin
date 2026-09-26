@@ -5,7 +5,7 @@ import arc.Events;
 import arc.util.CommandHandler;
 import arc.util.Log;
 import arc.util.Threads;
-import mindustry.game.EventType.ConnectionEvent;
+import mindustry.game.EventType.ConnectPacketEvent;
 import mindustry.mod.Plugin;
 
 public class BlockPlugin extends Plugin {
@@ -19,11 +19,12 @@ public class BlockPlugin extends Plugin {
             Log.err("BlockIp: Critical error loading config", e);
         }
 
-        Events.on(ConnectionEvent.class, this::handleConnection);
+        // ConnectionEvent fires before the client has sent its uuid, so the uuid whitelist never matched there
+        Events.on(ConnectPacketEvent.class, this::handleConnection);
     }
 
-    private void handleConnection(ConnectionEvent event) {
-        String uuid = event.connection.uuid;
+    private void handleConnection(ConnectPacketEvent event) {
+        String uuid = event.packet.uuid;
         String ip = event.connection.address;
 
         if (ConfigManager.isUuidWhitelisted(uuid)) {
