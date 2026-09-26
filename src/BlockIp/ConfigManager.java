@@ -96,9 +96,10 @@ public class ConfigManager {
         return uuid != null && data.uuidWhiteList.contains(uuid);
     }
 
-    /** {@code code} comes from the GeoIP database, which already writes ISO codes in upper case. */
+    /** Normalised like addBlockedCountry, so a database with lower-case codes cannot slip past. */
     public static boolean isCountryBlocked(String code) {
-        return code != null && data.blockedCountries.contains(code);
+        // toUpperCase returns the same instance when nothing changes, so MaxMind's codes cost no allocation
+        return code != null && data.blockedCountries.contains(code.toUpperCase());
     }
 
     public static String getKickText() {
