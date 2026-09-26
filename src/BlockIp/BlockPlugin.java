@@ -48,17 +48,13 @@ public class BlockPlugin extends Plugin {
         if (ConfigManager.isUuidWhitelisted(uuid) || ConfigManager.isIpWhitelisted(ip)) return;
         ConfigManager.ConfigData config = ConfigManager.settings();
 
-        // One session with the same uuid is not a second player: it is this one reconnecting before its old
-        // session timed out. Only one: with the server's strict mode off, vanilla does not refuse a uuid
-        // already in game, and a client repeating its uuid must not walk past the cap.
-        if (config.maxPlayersPerIp > 0) {
-            int fromAddress = Groups.player.count(p -> ip.equals(p.ip()));
-            if (fromAddress > 0 && Groups.player.contains(p -> ip.equals(p.ip()) && p.uuid().equals(uuid))) fromAddress--;
-            if (fromAddress >= config.maxPlayersPerIp) {
-                event.connection.kick(config.duplicateKickText);
-                kickedDuplicate++;
-                return;
-            }
+        // Every session counts, a stale one of this same uuid included: with the server's strict mode on,
+        // vanilla refuses a uuid already in game anyway, and with it off, forgiving one let a client that
+        // repeats its uuid past the cap
+        if (config.maxPlayersPerIp > 0 && Groups.player.count(p -> ip.equals(p.ip())) >= config.maxPlayersPerIp) {
+            event.connection.kick(config.duplicateKickText);
+            kickedDuplicate++;
+            return;
         }
 
         if (config.mode() != VpnGuard.Mode.off && VpnList.contains(ip)) {
