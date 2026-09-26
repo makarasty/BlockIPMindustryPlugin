@@ -2,7 +2,7 @@
 
 A lightweight plugin for Mindustry servers that keeps bots and unwanted networks out: connection flood limits, a per-address player cap, hosting/VPN network blocking and GeoIP country blocking, with IP and UUID whitelists.
 
-It replaces BotEradicator; remove `BotEradicator.jar` when installing this, and keep Essentials' `rules.vpn: false` - BlockIP owns VPN decisions, and Essentials would kick the VPN players BlockIP lets in or challenges. Two checks, both cheap:
+It replaces BotEradicator; remove `BotEradicator.jar` when installing this, and keep Essentials' `rules.vpn: false` (in `config/mods/Essentials/config/config_protect.yaml`) - BlockIP owns VPN decisions, and Essentials would kick the VPN players BlockIP lets in or challenges. Two checks, both cheap:
 
 *   **At accept**, on the network thread, before the server allocates anything for the connection: an address that opens connections too fast, or was refused recently, is closed straight away. A flood never reaches the main thread.
 *   **At the connect packet**, on the main thread, once per join attempt: the player cap, the VPN list and the country. A binary search over ~31,000 merged ranges (about 240 KB) and a memory-mapped GeoIP lookup; no worker threads, no locks.
