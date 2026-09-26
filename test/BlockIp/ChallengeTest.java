@@ -71,6 +71,20 @@ class ChallengeTest {
     }
 
     @Test
+    void theConnectDeadlineOnlyDropsAClientThatNeverJoined() {
+        Challenge challenge = new Challenge(new Random(6));
+        challenge.expect("slow", 0);
+        Object slow = challenge.token("slow");
+        challenge.options("slow");
+        assertFalse(challenge.expireIfNeverJoined("slow", slow), "joined, so its own join deadline decides");
+        assertTrue(challenge.isPending("slow"));
+
+        challenge.expect("ghost", 0);
+        assertTrue(challenge.expireIfNeverJoined("ghost", challenge.token("ghost")));
+        assertFalse(challenge.isPending("ghost"));
+    }
+
+    @Test
     void waitingChallengesAreCappedAndStaleOnesSwept() {
         Challenge challenge = new Challenge(new Random(4));
         for (int i = 0; i < Challenge.MAX_PENDING; i++) assertTrue(challenge.expect("p" + i, 0));

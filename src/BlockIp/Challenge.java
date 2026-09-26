@@ -28,6 +28,7 @@ final class Challenge {
         final long created;
         String[] options;
         int answer = -1;
+        boolean joined;
 
         Pending(long created) {
             this.created = created;
@@ -68,6 +69,7 @@ final class Challenge {
     String[] options(String uuid) {
         Pending p = pending.get(uuid);
         if (p == null) return null;
+        p.joined = true;
         if (p.options == null) {
             String[] options = new String[BUTTONS];
             int filled = 0;
@@ -114,6 +116,11 @@ final class Challenge {
     /** Timed out: true if that same challenge was still waiting, and is now dropped. */
     boolean expire(String uuid, Object token) {
         return token != null && pending.remove(uuid, token);
+    }
+
+    /** The connect-time deadline: drops the challenge only if its client never finished joining. */
+    boolean expireIfNeverJoined(String uuid, Object token) {
+        return token instanceof Pending p && !p.joined && pending.remove(uuid, token);
     }
 
     void leave(String uuid) {

@@ -172,22 +172,23 @@ public class BlockPlugin extends Plugin {
         Vars.net.setConnectFilter(filter);
     }
 
-    /** Room for a slow client to download the map before its challenge clock even starts. */
-    private static final int JOIN_GRACE_SECONDS = 90;
+    /** How long a client may take to download the map and join before it is treated as never joining. */
+    private static final int JOIN_GRACE_SECONDS = 180;
 
     /**
      * The deadline set at join covers only clients that join. One that takes the map and never confirms
-     * never reaches PlayerJoin, so a second deadline from the connect packet closes it either way.
+     * never reaches PlayerJoin, so a second deadline from the connect packet closes it - only while it has
+     * still not joined, so a slow loader is timed by its own join deadline instead.
      */
     private void closeIfNeverAnswered(mindustry.net.NetConnection connection, String uuid, ConfigManager.ConfigData config) {
         Object token = challenge.token(uuid);
         Timer.schedule(() -> {
-            if (!challenge.expire(uuid, token)) return;
+            if (!challenge.expireIfNeverJoined(uuid, token)) return;
             challengesFailed++;
             if (!connection.isConnected()) return;
             connection.kick(config.challengeFailText);
             FloodGuard.block(connection.address, System.currentTimeMillis() + config.blockSeconds * 1000L);
-        }, JOIN_GRACE_SECONDS + Math.max(config.challengeSeconds, 5));
+        }, JOIN_GRACE_SECONDS);
     }
 
     /** At join (and again if the menu was closed): the menu, and on first showing the deadline. */
