@@ -53,6 +53,13 @@ class FloodGuardTest {
     }
 
     @Test
+    void blocksExpireEvenWithRateLimitingOff() {
+        FloodGuard.block("9.9.9.9", 100);
+        assertTrue(FloodGuard.accept("1.2.3.4", 5_000, 0, WINDOW, BLOCK));
+        assertEquals(0, FloodGuard.blockedCount());
+    }
+
+    @Test
     void expiredEntriesAreSweptAway() {
         FloodGuard.block("6.6.6.6", 100);
         connect("7.7.7.7", 0);

@@ -49,9 +49,9 @@ final class FloodGuard {
             }
             blocked.remove(address, until);
         }
-        if (maxPerWindow <= 0) return true;
-
+        // Before the limit check: blocks placed by the main thread expire even with rate limiting off
         if (now >= nextSweep) sweep(now, windowMs);
+        if (maxPerWindow <= 0) return true;
 
         Window window = windows.get(address);
         if (window == null) {
