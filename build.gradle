@@ -2,47 +2,53 @@ apply plugin: "java"
 
 version '1.0'
 
-sourceCompatibility = JavaVersion.VERSION_17
-
 sourceSets.main.java.srcDirs = ["src"]
+sourceSets.test.java.srcDirs = ["test"]
 
-compileJava.options.encoding = "UTF-8"
-compileTestJava.options.encoding = "UTF-8"
-
-repositories{
+repositories {
     mavenCentral()
-    maven{ url "https://raw.githubusercontent.com/Zelaux/MindustryRepo/master/repository" }
-    maven{ url 'https://www.jitpack.io' }
-
-}
-
-ext{
-    mindustryVersion = 'v145'
-    jabelVersion = "93fde537c7"
-}
-
-allprojects{
-    tasks.withType(JavaCompile){
-        options.compilerArgs.addAll(['--release', '8'])
+    // The server jar from Mindustry's GitHub releases: the build the fleet runs, not a jitpack snapshot
+    ivy {
+        url = uri("https://github.com/")
+        patternLayout {
+            artifact "/[organisation]/[module]/releases/download/[revision]/[artifact].[ext]"
+        }
+        metadataSources { artifact() }
+        content { includeModule("Anuken", "Mindustry") }
     }
 }
 
-dependencies{
-    compileOnly "com.github.Anuken.Arc:arc-core:$mindustryVersion"
-    compileOnly "com.github.Anuken.Mindustry:core:$mindustryVersion"
-    annotationProcessor "com.github.Anuken:jabel:$jabelVersion"
+ext {
+    mindustryVersion = project.hasProperty('mindustryVersion') ? project.getProperty('mindustryVersion') : 'v159.7'
+}
+
+dependencies {
+    compileOnly "Anuken:Mindustry:$mindustryVersion"
     implementation 'com.maxmind.db:maxmind-db:4.0.0'
+
+    testImplementation "Anuken:Mindustry:$mindustryVersion"
+    testImplementation platform('org.junit:junit-bom:5.11.4')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
-jar{
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = "UTF-8"
+    options.release = 17
+}
+
+test {
+    useJUnitPlatform()
+}
+
+jar {
     archiveFileName = "${project.archivesBaseName}.jar"
-    duplicatesStrategy = duplicatesStrategy.EXCLUDE
-    from{
-        configurations.runtimeClasspath.collect{it.isDirectory() ? it : zipTree(it)}
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    from {
+        configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
     }
 
-    from(rootDir){
+    from(rootDir) {
         include "plugin.json"
     }
 }
-
