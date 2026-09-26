@@ -2,7 +2,7 @@
 
 A lightweight plugin for Mindustry servers that keeps bots and unwanted networks out: connection flood limits, a per-address player cap, hosting/VPN network blocking and GeoIP country blocking, with IP and UUID whitelists.
 
-It replaces BotEradicator; remove `BotEradicator.jar` when installing this. Two checks, both cheap:
+It replaces BotEradicator; remove `BotEradicator.jar` when installing this, and keep Essentials' `rules.vpn: false` - BlockIP owns VPN decisions, and Essentials would kick the VPN players BlockIP lets in or challenges. Two checks, both cheap:
 
 *   **At accept**, on the network thread, before the server allocates anything for the connection: an address that opens connections too fast, or was refused recently, is closed straight away. A flood never reaches the main thread.
 *   **At the connect packet**, on the main thread, once per join attempt: the player cap, the VPN list and the country. A binary search over ~31,000 merged ranges (about 240 KB) and a memory-mapped GeoIP lookup; no worker threads, no locks.
@@ -41,12 +41,12 @@ To compile the plugin yourself, you need a Java Development Kit (JDK) installed 
     `build/libs/`
 
 > **⚠️ Important for Developers:**
-> This plugin relies on the **MaxMind** (`maxmind-db`) library. Your `build.gradle` must be configured to **shadow (shade)** it into the final JAR file, otherwise the plugin will crash with `NoClassDefFoundError` at runtime.
+> This plugin relies on the **MaxMind** (`maxmind-db`) library. The `jar` task in `build.gradle` copies it into the final JAR; keep it that way, or the plugin crashes with `NoClassDefFoundError` at runtime.
 
 ## 📥 Installation
 
 1.  **Download/Build the Plugin:**
-    Place the `BlockIp.jar` into your server's `config/mods` folder.
+    Place `BlockIPMindustryPlugin.jar` into your server's `config/mods` folder.
 
 2.  **Download the GeoIP Database:**
     *   This plugin requires a MaxMind `.mmdb` database.
