@@ -8,15 +8,24 @@ import arc.util.Time;
 import arc.util.Timer;
 import mindustry.Vars;
 import mindustry.game.EventType.ConnectPacketEvent;
+import mindustry.game.EventType.PlayerJoin;
+import mindustry.game.EventType.PlayerLeave;
 import mindustry.game.EventType.ServerLoadEvent;
+import mindustry.gen.Call;
 import mindustry.gen.Groups;
+import mindustry.gen.Player;
 import mindustry.mod.Plugin;
+import mindustry.ui.Menus;
+
+import java.util.Random;
 
 public class BlockPlugin extends Plugin {
     // Main thread only, reported and reset by the minute summary
-    private int kickedCountry, kickedVpn, kickedDuplicate;
+    private int kickedCountry, kickedVpn, kickedDuplicate, challenged, challengesPassed, challengesFailed;
     private Filter filter;
     private final VpnGuard vpnGuard = new VpnGuard();
+    private final Challenge challenge = new Challenge(new Random());
+    private int menuId = -1;
     private boolean vpnAttackLogged;
 
     @Override
@@ -34,6 +43,14 @@ public class BlockPlugin extends Plugin {
         // After every plugin's init, so a filter another plugin installed there is kept and called after ours
         Events.on(ServerLoadEvent.class, event -> installFilter());
         Timer.schedule(this::minuteTick, 60f, 60f);
+
+        // Menus.registerMenu hands out the next free id, so it cannot take one another plugin holds
+        menuId = Menus.registerMenu(this::onChallengeAnswer);
+        Events.on(PlayerJoin.class, event -> showChallenge(event.player, true));
+        Events.on(PlayerLeave.class, event -> challenge.leave(event.player.uuid()));
+        // A player still being challenged can neither act nor talk; both are one empty-map check otherwise
+        Vars.netServer.admins.addActionFilter(action -> action.player == null || !challenge.isPending(action.player.uuid()));
+        Vars.netServer.admins.addChatFilter((player, text) -> challenge.isPending(player.uuid()) ? null : text);
     }
 
     /**
@@ -59,8 +76,15 @@ public class BlockPlugin extends Plugin {
 
         if (config.mode() != VpnGuard.Mode.off && VpnList.contains(ip)) {
             long now = Time.millis();
+            // Proved to be a person recently: nothing about their address has changed that
+            if (challenge.hasPassed(uuid, now)) return;
             VpnGuard.Reason why = vpnGuard.check(config, ip, now, Groups.player.size());
             if (vpnGuard.attackStarted()) onVpnAttack(config, now);
+            if (why != null && why != VpnGuard.Reason.attack && config.vpnChallenge && challenge.expect(uuid, now)) {
+                // Let in and asked once joined; too many waiting at once falls through to refusal
+                challenged++;
+                return;
+            }
             if (why == VpnGuard.Reason.busy) {
                 // The server being full says nothing about this address: no block, it may retry once a slot frees
                 kickedVpn++;
@@ -137,6 +161,41 @@ public class BlockPlugin extends Plugin {
         Vars.net.setConnectFilter(filter);
     }
 
+    /** At join (and again if the menu was closed): the menu, and on first showing the deadline. */
+    private void showChallenge(Player player, boolean first) {
+        String uuid = player.uuid();
+        String[] options = challenge.options(uuid);
+        if (options == null) return;
+        ConfigManager.ConfigData config = ConfigManager.settings();
+        String[][] rows = {{options[0], options[1]}, {options[2], options[3]}};
+        Call.menu(player.con, menuId, config.challengeTitle, config.challengeText.replace("{word}", challenge.word(uuid)), rows);
+        if (!first) return;
+        Object token = challenge.token(uuid);
+        Timer.schedule(() -> {
+            if (challenge.expire(uuid, token)) failChallenge(player);
+        }, Math.max(config.challengeSeconds, 5));
+    }
+
+    private void onChallengeAnswer(Player player, int option) {
+        if (player == null) return;
+        ConfigManager.ConfigData config = ConfigManager.settings();
+        switch (challenge.answer(player.uuid(), option, Time.millis(), config.challengePassHours * 3_600_000L)) {
+            case pass -> challengesPassed++;
+            case fail -> failChallenge(player);
+            case reshow -> showChallenge(player, false);
+            case none -> {
+            }
+        }
+    }
+
+    private void failChallenge(Player player) {
+        ConfigManager.ConfigData config = ConfigManager.settings();
+        challengesFailed++;
+        if (player.con == null || !player.con.isConnected()) return;
+        player.kick(config.challengeFailText);
+        FloodGuard.block(player.ip(), System.currentTimeMillis() + config.blockSeconds * 1000L);
+    }
+
     private void minuteTick() {
         // A plugin that sets its filter later, instead of chaining, drops ours; take the slot back with it
         // chained. (One that wraps ours would get ours twice - BotEradicator did; it is what this replaces.)
@@ -150,12 +209,15 @@ public class BlockPlugin extends Plugin {
             Log.info("BlockIp: no VPN burst for @ min, VPN connections follow the normal rules again", ConfigManager.settings().vpnBurstHoldMinutes);
         }
 
+        // A challenge for someone who never finished joining is dropped after a few minutes
+        challenge.sweep(Time.millis(), 5 * 60_000L);
+
         int refused = FloodGuard.refused.getAndSet(0);
-        if (refused + kickedCountry + kickedVpn + kickedDuplicate > 0) {
-            Log.info("BlockIp: last minute refused @ connections at accept, kicked @ by country, @ as VPN, @ as duplicates",
-                    refused, kickedCountry, kickedVpn, kickedDuplicate);
+        if (refused + kickedCountry + kickedVpn + kickedDuplicate + challenged > 0) {
+            Log.info("BlockIp: last minute refused @ connections at accept, kicked @ by country, @ as VPN, @ as duplicates; challenged @ VPN players, @ passed, @ failed",
+                    refused, kickedCountry, kickedVpn, kickedDuplicate, challenged, challengesPassed, challengesFailed);
         }
-        kickedCountry = kickedVpn = kickedDuplicate = 0;
+        kickedCountry = kickedVpn = kickedDuplicate = challenged = challengesPassed = challengesFailed = 0;
     }
 
     private void refreshVpnList(boolean force) {

@@ -62,6 +62,18 @@ public class ConfigManager {
         public int vpnBurstJoins = 8;
         public int vpnBurstSeconds = 60;
         public int vpnBurstHoldMinutes = 10;
+        /**
+         * Instead of refusing a VPN player (busy server, or "always"), let them in and ask them to press
+         * the button with a given word: a person passes in a second, a join bot does not. Attack mode
+         * still refuses outright - letting a flood in would send each bot the map.
+         */
+        public boolean vpnChallenge = true;
+        public int challengeSeconds = 30;
+        /** How long a passed player is not asked again. */
+        public int challengePassHours = 24;
+        public String challengeTitle = "Quick check";
+        public String challengeText = "Press the button that says [accent]{word}[] to play.";
+        public String challengeFailText = "Wrong button, or no answer in time.";
         public ArrayList<String> vpnLists = new ArrayList<>(List.of(
                 "https://raw.githubusercontent.com/X4BNet/lists_vpn/main/output/datacenter/ipv4.txt",
                 "https://raw.githubusercontent.com/X4BNet/lists_vpn/main/output/vpn/ipv4.txt"));
@@ -96,6 +108,9 @@ public class ConfigManager {
             if (vpnKickText == null) vpnKickText = defaults.vpnKickText;
             if (duplicateKickText == null) duplicateKickText = defaults.duplicateKickText;
             if (vpnMode == null) vpnMode = defaults.vpnMode;
+            if (challengeTitle == null) challengeTitle = defaults.challengeTitle;
+            if (challengeText == null) challengeText = defaults.challengeText;
+            if (challengeFailText == null) challengeFailText = defaults.challengeFailText;
             blockedCountries.remove(null);
             ipWhiteList.remove(null);
             uuidWhiteList.remove(null);
