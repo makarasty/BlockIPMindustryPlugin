@@ -60,6 +60,12 @@ class FloodGuardTest {
     }
 
     @Test
+    void aFloodOfNewAddressesWithinOneWindowStaysBounded() {
+        for (int i = 0; i < FloodGuard.MAX_TRACKED * 2; i++) connect("10." + (i >> 16) + "." + ((i >> 8) & 255) + "." + (i & 255), 1);
+        assertTrue(FloodGuard.trackedCount() <= FloodGuard.MAX_TRACKED);
+    }
+
+    @Test
     void expiredEntriesAreSweptAway() {
         FloodGuard.block("6.6.6.6", 100);
         connect("7.7.7.7", 0);

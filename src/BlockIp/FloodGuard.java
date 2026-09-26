@@ -55,6 +55,8 @@ final class FloodGuard {
 
         Window window = windows.get(address);
         if (window == null) {
+            // Checked here too: thousands of new addresses can arrive between two sweeps
+            if (windows.size() >= MAX_TRACKED) sweep(now, windowMs);
             window = new Window();
             window.start = now;
             windows.put(address, window);
@@ -83,10 +85,14 @@ final class FloodGuard {
         return blocked.size();
     }
 
+    static int trackedCount() {
+        return windows.size();
+    }
+
     private static void sweep(long now, long windowMs) {
         nextSweep = now + Math.max(windowMs, 1_000);
         windows.values().removeIf(window -> now - window.start >= windowMs);
-        if (windows.size() > MAX_TRACKED) windows.clear();
+        if (windows.size() >= MAX_TRACKED) windows.clear();
         for (Iterator<Map.Entry<String, Long>> it = blocked.entrySet().iterator(); it.hasNext(); ) {
             if (it.next().getValue() <= now) it.remove();
         }
