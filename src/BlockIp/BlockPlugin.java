@@ -80,15 +80,17 @@ public class BlockPlugin extends Plugin {
 
         if (config.mode() != VpnGuard.Mode.off && VpnList.contains(ip)) {
             long now = Time.millis();
-            // Proved to be a person recently: nothing about their address has changed that
-            if (challenge.hasPassed(uuid, now)) return;
             VpnGuard.Reason why = vpnGuard.check(config, ip, now, Groups.player.size());
             if (vpnGuard.attackStarted()) onVpnAttack(config, now);
-            if (why != null && why != VpnGuard.Reason.attack && config.vpnChallenge && challenge.expect(uuid, now)) {
-                // Let in and asked once joined; too many waiting at once falls through to refusal
-                challenged++;
-                guardCommands();
-                return;
+            if (why != null && why != VpnGuard.Reason.attack) {
+                // Proved to be a person from this address recently; attack mode does not honour that
+                if (challenge.hasPassed(uuid, ip, now)) return;
+                if (config.vpnChallenge && challenge.expect(uuid, now)) {
+                    // Let in and asked once joined; too many waiting at once falls through to refusal
+                    challenged++;
+                    guardCommands();
+                    return;
+                }
             }
             if (why == VpnGuard.Reason.busy) {
                 // The server being full says nothing about this address: no block, it may retry once a slot frees
@@ -199,7 +201,7 @@ public class BlockPlugin extends Plugin {
     private void onChallengeAnswer(Player player, int option) {
         if (player == null) return;
         ConfigManager.ConfigData config = ConfigManager.settings();
-        switch (challenge.answer(player.uuid(), option, Time.millis(), config.challengePassHours * 3_600_000L)) {
+        switch (challenge.answer(player.uuid(), player.ip(), option, Time.millis(), config.challengePassHours * 3_600_000L)) {
             case pass -> challengesPassed++;
             case fail -> failChallenge(player);
             case reshow -> showChallenge(player, false);

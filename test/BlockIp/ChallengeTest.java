@@ -30,10 +30,13 @@ class ChallengeTest {
         assertEquals(Challenge.BUTTONS, new HashSet<>(Arrays.asList(options)).size());
         assertSame(options, challenge.options("u1"));
 
-        assertEquals(Challenge.Verdict.pass, challenge.answer("u1", indexOfWord(challenge, "u1"), 10, 24 * HOUR));
+        assertEquals(Challenge.Verdict.pass, challenge.answer("u1", "1.1.1.1", indexOfWord(challenge, "u1"), 10, 24 * HOUR));
         assertFalse(challenge.isPending("u1"));
-        assertTrue(challenge.hasPassed("u1", 24 * HOUR));
-        assertFalse(challenge.hasPassed("u1", 24 * HOUR + 10));
+        assertTrue(challenge.hasPassed("u1", "1.1.1.1", 24 * HOUR));
+        assertFalse(challenge.hasPassed("u1", "1.1.1.1", 24 * HOUR + 10));
+        // The pass belongs to the uuid and the address together
+        assertFalse(challenge.hasPassed("u1", "2.2.2.2", 20));
+        assertFalse(challenge.hasPassed("someone-else", "1.1.1.1", 20));
     }
 
     @Test
@@ -43,12 +46,12 @@ class ChallengeTest {
         challenge.options("u2");
         int right = indexOfWord(challenge, "u2");
 
-        assertEquals(Challenge.Verdict.reshow, challenge.answer("u2", -1, 1, HOUR));
+        assertEquals(Challenge.Verdict.reshow, challenge.answer("u2", "a", -1, 1, HOUR));
         assertTrue(challenge.isPending("u2"));
-        assertEquals(Challenge.Verdict.fail, challenge.answer("u2", (right + 1) % Challenge.BUTTONS, 2, HOUR));
+        assertEquals(Challenge.Verdict.fail, challenge.answer("u2", "a", (right + 1) % Challenge.BUTTONS, 2, HOUR));
         assertFalse(challenge.isPending("u2"));
-        assertFalse(challenge.hasPassed("u2", 3));
-        assertEquals(Challenge.Verdict.none, challenge.answer("u2", right, 4, HOUR));
+        assertFalse(challenge.hasPassed("u2", "a", 3));
+        assertEquals(Challenge.Verdict.none, challenge.answer("u2", "a", right, 4, HOUR));
     }
 
     @Test
@@ -86,7 +89,7 @@ class ChallengeTest {
         assertNull(challenge.word("nobody"));
         assertFalse(challenge.isPending(null));
         assertFalse(challenge.expect(null, 0));
-        assertEquals(Challenge.Verdict.none, challenge.answer("nobody", 0, 0, HOUR));
+        assertEquals(Challenge.Verdict.none, challenge.answer("nobody", "a", 0, 0, HOUR));
         challenge.expect("u5", 0);
         assertNotNull(challenge.options("u5"));
     }

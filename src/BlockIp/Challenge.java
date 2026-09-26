@@ -7,9 +7,11 @@ import java.util.Map;
 import java.util.Random;
 
 /**
- * "Press the button with this word": a check a person passes in a second and a join bot does not,
- * offered to VPN players instead of refusing them. Holds only the state; BlockPlugin shows the menu
- * and kicks. Main thread only.
+ * "Press the button with this word": a check a person passes in a second and a generic join bot, which
+ * does not answer menus at all, does not. It is not proof against a bot written for this server: the
+ * word travels in the same packet as the buttons, as it must in a Mindustry menu. So a pass is kept
+ * narrow - bound to the uuid and address that earned it, and no use during attack mode. Holds only the
+ * state; BlockPlugin shows the menu and kicks. Main thread only.
  */
 final class Challenge {
     static final String[] WORDS = {"apple", "river", "stone", "cloud", "tiger", "piano", "rocket", "candle",
@@ -33,7 +35,7 @@ final class Challenge {
     }
 
     private final HashMap<String, Pending> pending = new HashMap<>();
-    /** uuid -> passed until (ms). Insertion order is age order, so the oldest go first when it is full. */
+    /** "uuid|address" -> passed until (ms). Insertion order is age order, so the oldest go first when it is full. */
     private final LinkedHashMap<String, Long> passed = new LinkedHashMap<>();
     private final Random random;
 
@@ -41,8 +43,8 @@ final class Challenge {
         this.random = random;
     }
 
-    boolean hasPassed(String uuid, long now) {
-        Long until = uuid == null ? null : passed.get(uuid);
+    boolean hasPassed(String uuid, String address, long now) {
+        Long until = uuid == null ? null : passed.get(uuid + '|' + address);
         return until != null && now < until;
     }
 
@@ -87,14 +89,15 @@ final class Challenge {
     }
 
     /** The player pressed {@code option}, or closed the menu (-1). */
-    Verdict answer(String uuid, int option, long now, long passMs) {
+    Verdict answer(String uuid, String address, int option, long now, long passMs) {
         Pending p = pending.get(uuid);
         if (p == null || p.options == null) return Verdict.none;
         if (option < 0) return Verdict.reshow;
         pending.remove(uuid);
         if (option != p.answer) return Verdict.fail;
-        passed.remove(uuid);
-        passed.put(uuid, now + passMs);
+        String key = uuid + '|' + address;
+        passed.remove(key);
+        passed.put(key, now + passMs);
         while (passed.size() > MAX_PASSED) {
             Iterator<String> oldest = passed.keySet().iterator();
             oldest.next();
