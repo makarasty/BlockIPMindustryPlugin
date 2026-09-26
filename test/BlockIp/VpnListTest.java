@@ -49,6 +49,24 @@ class VpnListTest {
     }
 
     @Test
+    void anOversizedSourceIsRefusedAndTheCacheKept(@TempDir Path dir) throws Exception {
+        Fi cache = new Fi(dir.resolve("vpn-ipv4.txt").toFile());
+        cache.writeString("6.6.6.0/24\n");
+        Path huge = Files.writeString(dir.resolve("huge.txt"), "1.1.1.1\n".repeat(64));
+        long limit = VpnList.maxSourceChars;
+        VpnList.maxSourceChars = 100;
+        try {
+            VpnList.refresh(List.of(huge.toUri().toString()), cache, 0L, true);
+            await();
+        } finally {
+            VpnList.maxSourceChars = limit;
+        }
+
+        assertTrue(VpnList.contains("6.6.6.6"));
+        assertFalse(VpnList.contains("1.1.1.1"));
+    }
+
+    @Test
     void aFreshCacheIsReadWithoutDownloading(@TempDir Path dir) throws Exception {
         Fi cache = new Fi(dir.resolve("vpn-ipv4.txt").toFile());
         cache.writeString("7.7.7.7\n");

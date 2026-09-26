@@ -25,6 +25,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * ones in one volatile write, so a join never waits on either.
  */
 final class VpnList {
+    /** Per source. The real lists are under 1 MB; anything past this is not a list of networks. Tests lower it. */
+    static long maxSourceChars = 16L << 20;
+
     private static volatile IpRanges ranges = IpRanges.EMPTY;
     private static final AtomicBoolean loading = new AtomicBoolean();
 
@@ -79,7 +82,13 @@ final class VpnList {
                     throw new IOException(url + " answered " + http.getResponseCode());
                 }
                 try (Reader in = new InputStreamReader(connection.getInputStream(), StandardCharsets.UTF_8)) {
-                    in.transferTo(out);
+                    char[] buffer = new char[8192];
+                    long total = 0;
+                    for (int read; (read = in.read(buffer)) > 0; ) {
+                        total += read;
+                        if (total > maxSourceChars) throw new IOException(url + " sent more than " + maxSourceChars + " characters");
+                        out.write(buffer, 0, read);
+                    }
                 }
                 out.newLine();
             }
