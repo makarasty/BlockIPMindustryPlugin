@@ -41,10 +41,14 @@ public class BlockPlugin extends Plugin {
      */
     private void handleConnection(ConnectPacketEvent event) {
         String ip = event.connection.address;
-        if (ConfigManager.isUuidWhitelisted(event.packet.uuid) || ConfigManager.isIpWhitelisted(ip)) return;
+        String uuid = event.packet.uuid;
+        if (ConfigManager.isUuidWhitelisted(uuid) || ConfigManager.isIpWhitelisted(ip)) return;
         ConfigManager.ConfigData config = ConfigManager.settings();
 
-        if (config.maxPlayersPerIp > 0 && Groups.player.count(p -> ip.equals(p.ip())) >= config.maxPlayersPerIp) {
+        // The same uuid is not a second player: it is this one reconnecting before its old session timed
+        // out, which vanilla sorts out itself (NetServer refuses a uuid already in game)
+        if (config.maxPlayersPerIp > 0
+                && Groups.player.count(p -> ip.equals(p.ip()) && !p.uuid().equals(uuid)) >= config.maxPlayersPerIp) {
             event.connection.kick(config.duplicateKickText);
             kickedDuplicate++;
             return;
