@@ -1,14 +1,21 @@
 # BlockIp Plugin for Mindustry
 
-A lightweight plugin for Mindustry servers that provides advanced access control through GeoIP blocking and whitelisting.
+A lightweight plugin for Mindustry servers that keeps bots and unwanted networks out: connection flood limits, a per-address player cap, hosting/VPN network blocking and GeoIP country blocking, with IP and UUID whitelists.
 
-The check runs once per join attempt, on the main thread, against a memory-mapped database: no worker threads, no locks, no per-IP cache to grow during a join flood.
+It replaces BotEradicator; remove `BotEradicator.jar` when installing this. Two checks, both cheap:
+
+*   **At accept**, on the network thread, before the server allocates anything for the connection: an address that opens connections too fast, or was refused recently, is closed straight away. A flood never reaches the main thread.
+*   **At the connect packet**, on the main thread, once per join attempt: the player cap, the VPN list and the country. A binary search over ~31,000 merged ranges (about 240 KB) and a memory-mapped GeoIP lookup; no worker threads, no locks.
 
 ## 🚀 Key Features
 
+*   **Flood Limits:** more than `maxConnectionsPerIp` connections in `connectionWindowMs` blocks the address for `blockSeconds`, refused at accept.
+*   **Player Cap per Address:** at most `maxPlayersPerIp` players from one address at a time.
+*   **Hosting / VPN Blocking** (off by default): the [X4BNet](https://github.com/X4BNet/lists_vpn) datacenter and VPN lists, downloaded once a day into `config/mods/blockip/vpn-ipv4.txt` and read from there on restart. A failed download keeps the last good copy.
 *   **GeoIP Blocking:** Automatically kick players connecting from specific countries using the MaxMind GeoLite2 database.
+*   **Refused Means Refused for a While:** an address kicked for its VPN or country is also blocked at accept for `blockSeconds`, so its retries cost nothing.
 *   **Dual Whitelisting:**
-    *   **IP Whitelist:** Allow specific IP addresses to bypass country checks.
+    *   **IP Whitelist:** Allow specific IP addresses to bypass every check.
     *   **UUID Whitelist:** Allow specific player UUIDs to bypass all checks (ideal for players with dynamic IPs).
 *   **Cheap Checks:**
     *   **Memory-Mapped IO:** the database is read through the OS page cache, not loaded onto the heap; the reader keeps a small cache of decoded records.
@@ -64,21 +71,44 @@ When generated, the file looks like this:
 
 ```json
 {
-  "blockedCountries" : [ ],
-  "ipWhiteList" : [ ],
-  "uuidWhiteList" : [ ],
-  "kickText" : "Your country is blocked on this server."
+"blockedCountries": [],
+"ipWhiteList": [],
+"uuidWhiteList": [],
+"kickText": "Your country is blocked on this server.",
+"blockVpn": false,
+"vpnLists": [
+	"https://raw.githubusercontent.com/X4BNet/lists_vpn/main/output/datacenter/ipv4.txt",
+	"https://raw.githubusercontent.com/X4BNet/lists_vpn/main/output/vpn/ipv4.txt"
+],
+"vpnListRefreshHours": 24,
+"vpnKickText": "VPN and hosting connections are not allowed on this server.",
+"maxPlayersPerIp": 2,
+"duplicateKickText": "Too many players are connected from your address.",
+"maxConnectionsPerIp": 4,
+"connectionWindowMs": 1000,
+"blockSeconds": 60
 }
 ```
+
+A file written by an older version gets the new keys added, with these defaults, on the next load.
 
 ### Configuration Fields
 
 | Field | Type | Description                                                                          |
 | :--- | :--- |:-------------------------------------------------------------------------------------|
 | `blockedCountries` | Array | A list of 2-letter ISO-3166 country codes to block (e.g., `["CN", "RU"]`).           |
-| `ipWhiteList` | Array | Specific IPs that can join even if their country is blocked (e.g., `["127.0.0.1"]`). |
-| `uuidWhiteList` | Array | Mindustry Client UUIDs that can join from *any* IP/Country.                          |
-| `kickText` | String | The message displayed to the player when they are disconnected.                      |
+| `ipWhiteList` | Array | IPs that skip every check, flood limits included (e.g., a shared NAT address). |
+| `uuidWhiteList` | Array | Mindustry Client UUIDs that skip the join checks (country, VPN, player cap). |
+| `kickText` | String | The message shown to a player from a blocked country. |
+| `blockVpn` | Boolean | Refuse hosting and VPN networks. Off by default: it also turns away players on a VPN. |
+| `vpnLists` | Array | Sources for the VPN list: `http(s)://` or `file:` URLs of `a.b.c.d/nn` lines. |
+| `vpnListRefreshHours` | Number | How old the cached list may get before it is downloaded again. |
+| `vpnKickText` | String | The message shown to a player on a listed network. |
+| `maxPlayersPerIp` | Number | Players one address may have on the server at once; `0` for no limit. |
+| `duplicateKickText` | String | The message shown to a player over that limit. |
+| `maxConnectionsPerIp` | Number | Connections one address may open per window; `0` turns flood limits off. |
+| `connectionWindowMs` | Number | The window for `maxConnectionsPerIp`, in milliseconds. |
+| `blockSeconds` | Number | How long an address that broke a rule is refused at accept. |
 
 ## 💻 Commands
 
@@ -86,7 +116,8 @@ All commands are intended for the **Server Console**.
 
 | Command | Arguments | Description |
 | :--- | :--- | :--- |
-| `blockipreload` | *(none)* | Reloads `config.json` and `ip.mmdb`. |
+| `blockipreload` | *(none)* | Reloads `config.json` and `ip.mmdb`, and downloads the VPN list again when it is on. |
+| `blockipstats` | *(none)* | Shows the VPN list size, GeoIP status, blocked addresses and whether the connect filter is installed. |
 | `addcountry` | `<country_code>` | Adds a 2-letter code to the blocklist (e.g., `addcountry US`). |
 | `removecountry` | `<country_code>` | Removes a country code from the blocklist. |
 | `addwhitelist` | `<ip>` | Adds an IP address to the whitelist. |
@@ -109,3 +140,4 @@ All commands are intended for the **Server Console**.
 ## ⚖️ License & Attribution
 
 This product uses GeoLite2 data created by MaxMind, available from https://www.maxmind.com.
+The hosting and VPN lists are published by X4BNet at https://github.com/X4BNet/lists_vpn.

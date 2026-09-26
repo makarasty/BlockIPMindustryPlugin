@@ -2,6 +2,6 @@
   "name": "BlockIP",
   "author": "MaKarastY",
   "main": "BlockIp.BlockPlugin",
-  "description": "A high-performance, thread-safe plugin for Mindustry servers that provides advanced access control through GeoIP blocking and whitelisting.",
-  "version": 0.1
+  "description": "Keeps bots and unwanted networks out: connection flood limits, a per-address player cap, hosting/VPN and GeoIP country blocking, with IP and UUID whitelists.",
+  "version": 0.3
 }
