@@ -11,6 +11,7 @@ import mindustry.game.EventType.ConnectPacketEvent;
 import mindustry.game.EventType.PlayerJoin;
 import mindustry.game.EventType.PlayerLeave;
 import mindustry.game.EventType.ServerLoadEvent;
+import mindustry.game.EventType.WorldLoadEndEvent;
 import mindustry.gen.Call;
 import mindustry.gen.Groups;
 import mindustry.gen.Player;
@@ -42,6 +43,9 @@ public class BlockPlugin extends Plugin {
         Events.on(ConnectPacketEvent.class, this::handleConnection);
         // After every plugin's init, so a filter another plugin installed there is kept and called after ours
         Events.on(ServerLoadEvent.class, event -> installFilter());
+        // Essentials' protect module sets its own filter, without chaining, on every map load. A frame later,
+        // after every handler of this event has run, take the slot back with theirs chained behind ours.
+        Events.on(WorldLoadEndEvent.class, event -> arc.Core.app.post(this::keepFilter));
         Timer.schedule(this::minuteTick, 60f, 60f);
 
         // Menus.registerMenu hands out the next free id, so it cannot take one another plugin holds
@@ -196,13 +200,16 @@ public class BlockPlugin extends Plugin {
         FloodGuard.block(player.ip(), System.currentTimeMillis() + config.blockSeconds * 1000L);
     }
 
+    /**
+     * A plugin that sets its filter later, instead of chaining, drops ours; take the slot back with it
+     * chained. (One that wraps ours would get ours twice - BotEradicator did; it is what this replaces.)
+     */
+    private void keepFilter() {
+        if (filter != null && Vars.net.getConnectFilter() != filter) installFilter();
+    }
+
     private void minuteTick() {
-        // A plugin that sets its filter later, instead of chaining, drops ours; take the slot back with it
-        // chained. (One that wraps ours would get ours twice - BotEradicator did; it is what this replaces.)
-        if (filter != null && Vars.net.getConnectFilter() != filter) {
-            Log.warn("BlockIp: another plugin replaced the connect filter; chaining it behind ours again");
-            installFilter();
-        }
+        keepFilter();
 
         if (vpnAttackLogged && !vpnGuard.underAttack(Time.millis())) {
             vpnAttackLogged = false;
