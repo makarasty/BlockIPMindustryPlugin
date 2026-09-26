@@ -68,6 +68,25 @@ public class ConfigManager {
         public int connectionWindowMs = 1000;
         /** How long an address that broke a rule is refused outright, before it can cost the server anything. */
         public int blockSeconds = 60;
+
+        /**
+         * A key written as null reads back as null, and a null kick text reaches NetConnection.kick,
+         * which throws on it inside the connect handler. Nulls take the defaults instead.
+         */
+        void repairNulls() {
+            ConfigData defaults = new ConfigData();
+            if (blockedCountries == null) blockedCountries = defaults.blockedCountries;
+            if (ipWhiteList == null) ipWhiteList = defaults.ipWhiteList;
+            if (uuidWhiteList == null) uuidWhiteList = defaults.uuidWhiteList;
+            if (vpnLists == null) vpnLists = defaults.vpnLists;
+            if (kickText == null) kickText = defaults.kickText;
+            if (vpnKickText == null) vpnKickText = defaults.vpnKickText;
+            if (duplicateKickText == null) duplicateKickText = defaults.duplicateKickText;
+            blockedCountries.remove(null);
+            ipWhiteList.remove(null);
+            uuidWhiteList.remove(null);
+            vpnLists.removeIf(url -> url == null);
+        }
     }
 
     static ConfigData settings() {
@@ -81,10 +100,7 @@ public class ConfigManager {
             try {
                 JsonValue root = new JsonReader().parse(CONFIG_FILE);
                 ConfigData loaded = json.readValue(ConfigData.class, root);
-                if (loaded.ipWhiteList == null) loaded.ipWhiteList = new HashSet<>();
-                if (loaded.uuidWhiteList == null) loaded.uuidWhiteList = new HashSet<>();
-                if (loaded.blockedCountries == null) loaded.blockedCountries = new HashSet<>();
-                if (loaded.vpnLists == null) loaded.vpnLists = new ArrayList<>();
+                loaded.repairNulls();
                 publish(loaded);
                 // A file from an older build lacks the newer keys; write them in so the file shows them
                 if (missesAKey(root)) save();
