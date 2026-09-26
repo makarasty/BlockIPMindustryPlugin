@@ -89,6 +89,7 @@ public class BlockPlugin extends Plugin {
                     // Let in and asked once joined; too many waiting at once falls through to refusal
                     challenged++;
                     guardCommands();
+                    closeIfNeverAnswered(event.connection, uuid, config);
                     return;
                 }
             }
@@ -166,6 +167,24 @@ public class BlockPlugin extends Plugin {
     private void installFilter() {
         filter = new Filter(Vars.net.getConnectFilter());
         Vars.net.setConnectFilter(filter);
+    }
+
+    /** Room for a slow client to download the map before its challenge clock even starts. */
+    private static final int JOIN_GRACE_SECONDS = 90;
+
+    /**
+     * The deadline set at join covers only clients that join. One that takes the map and never confirms
+     * never reaches PlayerJoin, so a second deadline from the connect packet closes it either way.
+     */
+    private void closeIfNeverAnswered(mindustry.net.NetConnection connection, String uuid, ConfigManager.ConfigData config) {
+        Object token = challenge.token(uuid);
+        Timer.schedule(() -> {
+            if (!challenge.expire(uuid, token)) return;
+            challengesFailed++;
+            if (!connection.isConnected()) return;
+            connection.kick(config.challengeFailText);
+            FloodGuard.block(connection.address, System.currentTimeMillis() + config.blockSeconds * 1000L);
+        }, JOIN_GRACE_SECONDS + Math.max(config.challengeSeconds, 5));
     }
 
     /** At join (and again if the menu was closed): the menu, and on first showing the deadline. */
