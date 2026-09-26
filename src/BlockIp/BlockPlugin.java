@@ -87,6 +87,7 @@ public class BlockPlugin extends Plugin {
             if (why != null && why != VpnGuard.Reason.attack && config.vpnChallenge && challenge.expect(uuid, now)) {
                 // Let in and asked once joined; too many waiting at once falls through to refusal
                 challenged++;
+                guardCommands();
                 return;
             }
             if (why == VpnGuard.Reason.busy) {
@@ -178,6 +179,21 @@ public class BlockPlugin extends Plugin {
         Timer.schedule(() -> {
             if (challenge.expire(uuid, token)) failChallenge(player);
         }, Math.max(config.challengeSeconds, 5));
+    }
+
+    /**
+     * A player still being challenged must not run commands (a vote, a votekick) either, and commands never
+     * reach the chat filter. Guarded when a challenge starts, which also catches commands registered since
+     * (Essentials re-registers on reload); a server that never challenges anyone is never touched.
+     */
+    private void guardCommands() {
+        CommandGuard.guard(Vars.netServer.clientCommands,
+                caller -> caller instanceof Player player && challenge.isPending(player.uuid()),
+                caller -> {
+                    Player player = (Player) caller;
+                    String word = challenge.word(player.uuid());
+                    if (word != null) player.sendMessage(ConfigManager.settings().challengeText.replace("{word}", word));
+                });
     }
 
     private void onChallengeAnswer(Player player, int option) {
