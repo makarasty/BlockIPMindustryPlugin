@@ -128,6 +128,16 @@ class SuspicionTest {
     }
 
     @Test
+    void regularsMovingOverFromACrashedSiblingAreNoCohort() {
+        // Varied clients and names, all within seconds: what a sibling server crashing looks like
+        List<Session> online = new ArrayList<>();
+        String[] names = {"Fance", "Athos", "|TwX|twixun", "PÇpŕòpeŗ", "Kitsune", "лун", "jonasito"};
+        for (int i = 0; i < names.length; i++) online.add(new Session("p" + i, "a" + i, names[i], i * 1_000L, 100 + i, false, true));
+        for (Session s : online) assertFalse(Suspicion.inCohort(s, online, CONFIG), s.name);
+        assertTrue(Suspicion.inCohort(raidCohort().get(0), raidCohort(), CONFIG));
+    }
+
+    @Test
     void namesThatLookAlike() {
         assertEquals("999a", Suspicion.shape("004m"));
         assertTrue(Suspicion.similar(Suspicion.shape("004m"), "004m", "001s"));

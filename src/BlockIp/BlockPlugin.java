@@ -729,7 +729,10 @@ public class BlockPlugin extends Plugin {
         // Every low-trust sender, not only one that already looks like a raid's: a vote the gate refuses does no
         // harm, a line is posted however few minutes its sender has, and fifteen bots that walked one minute each
         // and joined a few at a time posted theirs unchecked. While trust is new, only no active minute counts
-        if (config.chatFloodSenders <= 0 || !lowTrust(uuid, config) || !chorusVoice(uuid, now, config, true)) return text;
+        // Nor one who plays (see Suspicion#playing): five newcomers saying "good game" at map end are not a flood,
+        // and walking is what the incident's bots could not do
+        if (config.chatFloodSenders <= 0 || !lowTrust(uuid, config) || !chorusVoice(uuid, now, config, true)
+                || Suspicion.playing(sessions.get(uuid))) return text;
         String key = Chorus.chatKey(text);
         if (key.isEmpty()) return text;
         int times = key.length() <= 3 ? 2 : 1;
@@ -892,9 +895,12 @@ public class BlockPlugin extends Plugin {
         ConfigManager.ConfigData config = ConfigManager.settings();
         challengesFailed++;
         trust.flag(player.uuid());
-        // Blocked whether still connected or not: one that left before its deadline fails here too
-        FloodGuard.block(player.ip(), System.currentTimeMillis() + config.blockSeconds * 1000L);
-        if (player.con != null && player.con.isConnected()) player.kick(config.challengeFailText);
+        // As in failNeverJoined, only a VPN address is blocked (whether still connected or not: one that left
+        // before its deadline fails here too); a carrier NAT is not shut out for one newcomer, the flag suffices
+        boolean vpn = VpnList.contains(player.ip());
+        if (vpn) FloodGuard.block(player.ip(), System.currentTimeMillis() + config.blockSeconds * 1000L);
+        // 0 for the rest: not even vanilla's 30 s recent-kick hold on the shared address
+        if (player.con != null && player.con.isConnected()) player.con.kick(config.challengeFailText, vpn ? 30_000L : 0L);
     }
 
     /**

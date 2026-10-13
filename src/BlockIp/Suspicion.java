@@ -43,15 +43,21 @@ final class Suspicion {
 
     /**
      * Joined in a burst: it and at least raidJoins - 1 other burst joins still online came within
-     * raidJoinSeconds of each other. Counted from who is online, so nothing is kept for those who left.
+     * raidJoinSeconds of each other, and at least half of them share its client fingerprint or a look-alike
+     * name, the test {@link Raid} puts to a burst. Without that, regulars moving over together from a crashed
+     * sibling were a cohort for their whole session. Counted from who is online, so nothing is kept for those who left.
      */
     static boolean inCohort(Session s, Collection<Session> online, ConfigManager.ConfigData c) {
         if (!s.burstJoin || c.raidJoins <= 0) return false;
-        int cohort = 1;
+        int cohort = 1, sameClient = 1, lookAlike = 1;
+        String shape = shape(s.name);
         for (Session o : online) {
-            if (o != s && o.burstJoin && Math.abs(o.joined - s.joined) <= c.raidJoinSeconds * 1000L) cohort++;
+            if (o == s || !o.burstJoin || Math.abs(o.joined - s.joined) > c.raidJoinSeconds * 1000L) continue;
+            cohort++;
+            if (o.fingerprint == s.fingerprint) sameClient++;
+            if (similar(shape, s.name, o.name)) lookAlike++;
         }
-        return cohort >= c.raidJoins;
+        return cohort >= c.raidJoins && Math.max(sameClient, lookAlike) * 2 >= cohort;
     }
 
     /** {@code s} may be null for a player who is not online; {@code online} may include {@code s}. */
