@@ -1,0 +1,128 @@
+package BlockIp;
+
+import java.util.ArrayDeque;
+import java.util.Iterator;
+
+/**
+ * Raid mode: on while a raid is going on, for everyone, not only VPN addresses - the bots that beat
+ * the vote came through residential proxies no list knows. It starts on a burst of joins not yet trusted
+ * from distinct addresses, on a coordinated vote, on a chat flood, or by hand, and holds for a while
+ * after the last trigger. While on, low-trust joins are challenged and only trusted players vote.
+ * Holds only the state; BlockPlugin acts on it. Main thread only.
+ */
+final class Raid {
+    private static final class Join {
+        final String address, name;
+        final int fingerprint;
+        final long time;
+
+        Join(String address, int fingerprint, String name, long time) {
+            this.address = address;
+            this.fingerprint = fingerprint;
+            this.name = name;
+            this.time = time;
+        }
+    }
+
+    /** Recent joins not yet trusted, oldest first, one per address, never more than the burst threshold. */
+    private final ArrayDeque<Join> joins = new ArrayDeque<>();
+    private long until, started;
+    private String reason;
+
+    /**
+     * A join not yet trusted from {@code address}, with its connect {@code fingerprint} and {@code name}. Returns
+     * true when it is the one that started raid mode. One address reconnecting over and over is one join; a burst
+     * during raid mode extends it. A burst counts only when it looks scripted (see {@link #scripted}).
+     */
+    boolean join(String address, int fingerprint, String name, long now, int burst, long windowMs, long holdMs) {
+        if (burst <= 0) return false;
+        while (!joins.isEmpty() && now - joins.peekFirst().time > windowMs) joins.pollFirst();
+        for (Iterator<Join> it = joins.iterator(); it.hasNext(); ) {
+            if (it.next().address.equals(address)) it.remove();
+        }
+        joins.addLast(new Join(address, fingerprint, name, now));
+        while (joins.size() > burst) joins.pollFirst();
+        if (joins.size() < burst || !scripted()) return false;
+        joins.clear();
+        return trigger("join burst", now, holdMs);
+    }
+
+    /**
+     * At least half the burst shares one client fingerprint or has look-alike names. Regulars moving over from
+     * a crashed sibling server, which has its own trust file, have none here, and come with varied locales,
+     * versions, colours and devices; a script's bots share one client and one name pattern.
+     */
+    private boolean scripted() {
+        for (Join j : joins) {
+            int sameClient = 0, lookAlike = 0;
+            String shape = Suspicion.shape(j.name);
+            for (Join o : joins) {
+                if (o.fingerprint == j.fingerprint) sameClient++;
+                if (o == j || Suspicion.similar(shape, j.name, o.name)) lookAlike++;
+            }
+            if (Math.max(sameClient, lookAlike) * 2 >= joins.size()) return true;
+        }
+        return false;
+    }
+
+    /**
+     * Starts raid mode, or extends it. Returns true when this started it. One that ran out but whose
+     * end is not announced yet is extended, so every start is followed by exactly one end.
+     */
+    boolean trigger(String why, long now, long holdMs) {
+        boolean starting = reason == null;
+        if (starting) {
+            started = now;
+            reason = why;
+        }
+        until = Math.max(until, now + holdMs);
+        return starting;
+    }
+
+    /**
+     * Starts raid mode, never extends it: false while it is on, or ran out with its end not announced yet
+     * (the caller calls {@link #ended} first). How a chorus starts it: bots that passed this raid's challenge
+     * are not asked again during it and a chorus costs them nothing, so one that extended it held it on for good.
+     */
+    boolean start(String why, long now, long holdMs) {
+        return reason == null && trigger(why, now, holdMs);
+    }
+
+    /** On until {@link #stop}. Returns true when this started it. */
+    boolean startManually(long now) {
+        boolean starting = trigger("manual", now, 0);
+        until = Long.MAX_VALUE;
+        return starting;
+    }
+
+    /** Ends it now. Returns true when it was on, or ran out without its end announced yet. */
+    boolean stop() {
+        boolean was = reason != null;
+        until = 0;
+        reason = null;
+        return was;
+    }
+
+    boolean active(long now) {
+        return now < until;
+    }
+
+    /** True once, at the first call after the hold ran out; the caller announces the end. */
+    boolean ended(long now) {
+        if (reason == null || now < until) return false;
+        reason = null;
+        return true;
+    }
+
+    long started() {
+        return started;
+    }
+
+    long until() {
+        return until;
+    }
+
+    String reason() {
+        return reason;
+    }
+}

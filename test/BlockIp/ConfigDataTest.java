@@ -46,5 +46,21 @@ class ConfigDataTest {
         assertEquals(VpnGuard.Mode.auto, data.mode());
         assertEquals(2, data.maxPlayersPerIp);
         assertEquals(4, data.maxConnectionsPerIp);
+        assertEquals(30, data.voteMinActiveMinutes);
+        assertEquals(20, data.voteStartMinutes);
+        assertEquals(10, data.voteCastMinutes);
+        assertEquals(0.4, data.trustedTargetShare);
+        assertEquals(120, data.trustedMinutes);
+        assertEquals(6, data.raidJoins);
+        assertTrue(data.voteCommands.contains("votekick") && data.voteCommands.contains("evote"));
+    }
+
+    @Test
+    void nullVoteSettingsTakeTheDefaults() {
+        ConfigManager.ConfigData defaults = new ConfigManager.ConfigData();
+        ConfigManager.ConfigData data = read("{\"voteCommands\":null,\"voteRefusedText\":null,\"raidMoveText\":null}");
+        assertEquals(defaults.voteCommands, data.voteCommands);
+        assertEquals(defaults.voteRefusedText, data.voteRefusedText);
+        assertEquals(defaults.raidMoveText, data.raidMoveText);
     }
 }

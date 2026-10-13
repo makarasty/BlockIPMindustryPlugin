@@ -5,6 +5,8 @@ import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Random;
+import java.util.function.BiConsumer;
+import java.util.function.Predicate;
 
 /**
  * "Press the button with this word": a check a person passes in a second and a generic join bot, which
@@ -17,7 +19,12 @@ final class Challenge {
     static final String[] WORDS = {"apple", "river", "stone", "cloud", "tiger", "piano", "rocket", "candle",
             "forest", "anchor", "silver", "garden", "lemon", "castle", "planet", "bridge"};
     static final int BUTTONS = 4;
-    /** Challenges waiting at once past which new VPN joins are refused outright: that many is a flood. */
+    /**
+     * Clients challenged at connect and still to join, at most: past it, each new one drops the one waiting
+     * longest. Turning the newest away instead let a few dozen clients that take the map and never confirm
+     * hold every place, and every real newcomer was refused. A player challenged in game takes no place:
+     * the player limit bounds those already.
+     */
     static final int MAX_PENDING = 200;
     /** Remembered passes past which the oldest are forgotten. */
     static final int MAX_PASSED = 10_000;
@@ -28,10 +35,19 @@ final class Challenge {
         final long created;
         String[] options;
         int answer = -1;
-        boolean joined;
+        /** Raid mode: the buttons are not shown, and so cannot be answered, until the player's unit has moved. */
+        final boolean move;
+        /**
+         * The connection that is still to join; null for a player in game, challenged there or since joined.
+         * Let go at join: this is also the token a deadline timer holds, which would keep a closed
+         * connection's buffers alive until it fired.
+         */
+        Object connection;
 
-        Pending(long created) {
+        Pending(long created, boolean move, Object connection) {
             this.created = created;
+            this.move = move;
+            this.connection = connection;
         }
     }
 
@@ -49,12 +65,59 @@ final class Challenge {
         return until != null && now < until;
     }
 
-    /** At the connect packet: this uuid gets a challenge once it joins. False when too many are waiting already. */
+    /** A player in game is challenged. False while this uuid waits on a connection that has not joined yet. */
     boolean expect(String uuid, long now) {
+        return expect(uuid, now, false);
+    }
+
+    /** With {@code move}, the player has to walk before the buttons are shown (see {@link #waitsForMove}). */
+    boolean expect(String uuid, long now, boolean move) {
+        return expect(uuid, now, move, null, null);
+    }
+
+    /**
+     * For {@code connection}, which vanilla let in and is downloading the map. False while the uuid waits on
+     * another connection that has not joined yet: one uuid sent from a thousand addresses gets one challenge,
+     * not a thousand that each hold their connection until they time out. With {@link #MAX_PENDING} waiting,
+     * the one waiting longest is dropped and handed to {@code dropped}, which is no fault of its own.
+     */
+    boolean expect(String uuid, long now, boolean move, Object connection, BiConsumer<String, Object> dropped) {
         if (uuid == null) return false;
-        if (!pending.containsKey(uuid) && pending.size() >= MAX_PENDING) return false;
-        pending.put(uuid, new Pending(now));
+        Pending old = pending.get(uuid);
+        if (old != null && old.connection != null) return false;
+        if (connection != null) {
+            // A scan, at most MAX_PENDING plus the players online, and only for a join that is challenged
+            int waiting = 0;
+            String oldest = null;
+            long oldestAt = Long.MAX_VALUE;
+            for (Map.Entry<String, Pending> e : pending.entrySet()) {
+                Pending p = e.getValue();
+                if (p.connection == null) continue;
+                waiting++;
+                if (p.created < oldestAt) {
+                    oldestAt = p.created;
+                    oldest = e.getKey();
+                }
+            }
+            if (waiting >= MAX_PENDING) dropped.accept(oldest, pending.remove(oldest).connection);
+        }
+        pending.put(uuid, new Pending(now, move, connection));
         return true;
+    }
+
+    /** The player joined: their join deadline no longer applies, and their connection is let go. */
+    void joined(String uuid) {
+        Pending p = pending.get(uuid);
+        if (p != null) p.connection = null;
+    }
+
+    /**
+     * A raid-mode challenge whose buttons are not out yet. The answer index exists only once they are, so
+     * a script cannot answer before its unit has moved, whatever it sends.
+     */
+    boolean waitsForMove(String uuid) {
+        Pending p = pending.isEmpty() || uuid == null ? null : pending.get(uuid);
+        return p != null && p.move && p.options == null;
     }
 
     /** Cheap enough for the action and chat filters: nothing to look up while nobody is being challenged. */
@@ -69,7 +132,7 @@ final class Challenge {
     String[] options(String uuid) {
         Pending p = pending.get(uuid);
         if (p == null) return null;
-        p.joined = true;
+        p.connection = null;
         if (p.options == null) {
             String[] options = new String[BUTTONS];
             int filled = 0;
@@ -108,7 +171,10 @@ final class Challenge {
         return Verdict.pass;
     }
 
-    /** Identifies this challenge, so a timer set for it cannot expire a later one for the same uuid. */
+    /**
+     * Identifies this challenge, so a timer set for it cannot expire a later one for the same uuid. Taken once
+     * joined, when it no longer holds the connection.
+     */
     Object token(String uuid) {
         return pending.get(uuid);
     }
@@ -118,13 +184,32 @@ final class Challenge {
         return token != null && pending.remove(uuid, token);
     }
 
-    /** The connect-time deadline: drops the challenge only if its client never finished joining. */
-    boolean expireIfNeverJoined(String uuid, Object token) {
-        return token instanceof Pending p && !p.joined && pending.remove(uuid, token);
+    /**
+     * Drops each challenge whose connection closed before it joined, or is still not in after
+     * {@code graceMs}, and hands it to {@code dropped}. A client that takes the map and never confirms
+     * never reaches PlayerJoin and never leaves, so without this it would hold its place for good.
+     */
+    void dropNeverJoined(long now, long graceMs, Predicate<Object> connected, BiConsumer<String, Object> dropped) {
+        if (pending.isEmpty()) return;
+        for (Iterator<Map.Entry<String, Pending>> it = pending.entrySet().iterator(); it.hasNext(); ) {
+            Map.Entry<String, Pending> e = it.next();
+            Pending p = e.getValue();
+            if (p.connection == null || now - p.created <= graceMs && connected.test(p.connection)) continue;
+            it.remove();
+            dropped.accept(e.getKey(), p.connection);
+        }
     }
 
-    void leave(String uuid) {
+    /**
+     * The player left. True when they left a challenge they were in game with still open, and it is now
+     * dropped: leaving is failing it, or a bot leaves a second before its deadline and comes back clean. One
+     * still to join, perhaps on another connection of the same uuid, is left to {@link #dropNeverJoined}.
+     */
+    boolean leave(String uuid) {
+        Pending p = pending.get(uuid);
+        if (p == null || p.connection != null) return false;
         pending.remove(uuid);
+        return true;
     }
 
     /** Drops challenges for players who never finished joining, and passes that ran out. */

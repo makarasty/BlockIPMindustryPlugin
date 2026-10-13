@@ -1,6 +1,6 @@
 # BlockIp Plugin for Mindustry
 
-A lightweight plugin for Mindustry servers that keeps bots and unwanted networks out: connection flood limits, a per-address player cap, hosting/VPN network blocking and GeoIP country blocking, with IP and UUID whitelists.
+A lightweight plugin for Mindustry servers that keeps bots and unwanted networks out: connection flood limits, a per-address player cap, hosting/VPN network blocking and GeoIP country blocking, with IP and UUID whitelists - and, against raids from residential proxies no list knows, per-server trust from real activity, a vote gate and a raid mode.
 
 It replaces BotEradicator; remove `BotEradicator.jar` when installing this, and keep Essentials' `rules.vpn: false` (in `config/mods/Essentials/config/config_protect.yaml`) - BlockIP owns VPN decisions, and Essentials would kick the VPN players BlockIP lets in or challenges. Two checks, both cheap:
 
@@ -10,9 +10,14 @@ It replaces BotEradicator; remove `BotEradicator.jar` when installing this, and 
 ## 🚀 Key Features
 
 *   **Flood Limits:** more than `maxConnectionsPerIp` connections in `connectionWindowMs` blocks the address for `blockSeconds`, refused at accept.
-*   **Player Cap per Address:** at most `maxPlayersPerIp` players from one address at a time.
+*   **Player Cap per Address:** at most `maxPlayersPerIp` players from one address at a time, clients still loading the map included.
 *   **Hosting / VPN Blocking, only when it is needed:** the [X4BNet](https://github.com/X4BNet/lists_vpn) datacenter and VPN lists, downloaded once a day into `config/mods/blockip/vpn-ipv4.txt` and read from there on restart (a failed download keeps the last good copy). In the default `auto` mode a VPN player can join a quiet server; VPN joins are refused only while `vpnMinPlayers` are online, or for `vpnBurstHoldMinutes` after `vpnBurstJoins` VPN joins arrive within `vpnBurstSeconds` - and the VPN players who joined during that burst are kicked when it trips. `always` refuses every VPN address, `off` never looks. IPv4 only: the published lists have no IPv6.
-*   **A Button Instead of a Refusal** (`vpnChallenge`, on by default): a VPN player who would be refused for a busy server or `always` is let in and shown a menu - press the button with the given word within `challengeSeconds`. A person passes in a second and is not asked again from the same address for `challengePassHours`; a wrong button or no answer is a kick and a block, and so is a client that takes the map and never finishes joining. This stops generic join bots, which do not answer menus; it is not proof against a bot written for this server, since a Mindustry menu has to send the word along with the buttons - which is why a pass counts for nothing during attack mode. Until then the player can neither build, chat nor run commands (each command is guarded in place the first time a challenge starts). Attack mode still refuses outright: letting a flood in would send every bot the map.
+*   **A Button Instead of a Refusal** (`vpnChallenge`, on by default): a VPN player who would be refused for a busy server or `always` is let in and shown a menu - press the button with the given word within `challengeSeconds`. A person passes in a second and is not asked again from the same address for `challengePassHours`; a wrong button, no answer or leaving before answering is a kick and a block, and so is a client that takes the map and never finishes joining, or closes before it does (a player whose game crashed mid-challenge is flagged too, until they pass one). A uuid gets one such challenge at a time: the same uuid connecting again from elsewhere before the first has joined is turned away. With 200 clients challenged and still loading, each new one drops the one waiting longest - a kick only, no flag and no block, since during such a flood that is most often a real newcomer on a slow map load - so clients that never join cannot lock newcomers out; players challenged in game take no place. This stops generic join bots, which do not answer menus; it is not proof against a bot written for this server, since a Mindustry menu has to send the word along with the buttons - which is why a pass counts for nothing during attack mode. Until then the player can neither build, chat nor run commands. Attack mode still refuses outright: letting a flood in would send every bot the map. A uuid that fails is flagged (see below) and challenged on every later join until it passes.
+*   **Trust from Real Activity:** each server keeps, per uuid, the minutes its player was really *active* - the unit moved a plausible distance by the player's own snapshots, or the player built, broke, rotated, configured or moved items on a block while their client sent snapshots that minute - and on how many days, in `config/mods/blockip/trust.txt`. Idling earns nothing, which is what beats bots with stable uuids that idle to pass a playtime gate; nor do the free packets a script can send empty (commanding units, dropping plans, taking control). Respawns, teleports, impossible speeds and units shoved about while their client sends no snapshots count nothing. *Low trust* is under `voteMinActiveMinutes` or flagged; *trusted* is `trustedMinutes` over `trustedDays` days, each new day counted only a full day after the first active minute (one minute before midnight and the rest after it are one day, not two). A record is created only by an active minute, so a flood of new uuids costs no memory; records under 30 minutes are kept apart and, past 100,000 records, the least recently seen of them goes first, so farming fresh uuids pushes out only other fresh uuids, never a veteran. Records on probation not seen for 30 days are dropped at load (a flag is kept). The file is saved every 10 minutes it changed (written on a background thread, to a temp file renamed over the old one) and at shutdown; one that does not read back is kept aside as `trust.txt.bad-<time>` and the server starts with no trust. **On a first install the store is empty:** a regular casts votes after `voteCastMinutes` active minutes and starts a kick after `voteStartMinutes`, both within their first session; for `trustedDays` days nobody is trusted, so during raid mode only admins and whitelisted uuids vote. For those first `trustedDays` days coordinated votes and chat floods count only uuids with no active minute at all: every regular is under the vote minimum then, but has a record after their first active minute, and a raid's fresh bots do not. Join bursts count as always. Joins in the first 15 minutes after the server starts never count toward a burst, so the reconnect wave after a restart does not start raid mode.
+*   **A Vote Gate:** vanilla's `/votekick` passes on three yes votes, and a raid brought seventeen bots. Every command in `voteCommands` (vanilla `votekick` and `vote`, Essentials' `evotekick`, `evote`, `rtv`, `votemap`, whichever is registered) is gated for players: an admin always may (`/vote c` too), and so may a whitelisted uuid; anyone else needs no pending challenge, a client that has sent snapshots this session (a headless bot never does), a suspicion score under `voteMaxSuspicion`, and during raid mode to be trusted. Starting a kick (`votekick`, `evotekick`, `evote kick`) takes `voteStartMinutes` active minutes; casting a vote (`vote`, Essentials' chat words) or any other vote command takes `voteCastMinutes`, and a cast also needs the player to have connected before the vote began. A vanilla kick passes only once the initiator or a yes voter is trusted (or an admin); a kick of a **trusted** player also needs the yes votes to reach `trustedTargetShare` of the players active in the last 5 minutes, three at least: bots farmed past the vote minutes may outnumber the regulars, but are not trusted. The counter is held back (it shows at most 1) until that holds, then given back; one that runs out held fails. So with nobody trusted online, only an admin's vote kicks. Essentials counts yes votes itself, so every Essentials vote (`evote kick|map|gameover|skip|back|random`, `evotekick`, `votemap`) takes a trusted player to start it, unless the starter is alone on the server and it is not a kick; so does vanilla's kick, should a server build lack the vote session's fields. For the first `trustedDays` days of trust, when nobody can be trusted yet, both rules apply only to a kick naming a trusted (whitelisted) player (Essentials' name matches every player whose name contains it, an id anyone online). Essentials counts chat words (`y`, `+`, ...) as votes; while one of its votes runs, those words from a player the gate would refuse are dropped before Essentials sees them. The same vote command within `coordinatedSeconds` from `coordinatedCommands` players not yet trusted who already look like raiders - joined in a burst still online, took part in a chorus before, flagged, or refused by the gate for no client snapshot or a suspicion score too high - starts raid mode, except from its first sender. Players refused only for being short of active minutes, and regulars the gate lets vote, voting a griefer out or calling `/rtv` together, are not counted. Commands are guarded in place, once each, at server load, before every command message and every minute, so Essentials' re-registration on reload is caught before the command can run.
+*   **Suspicion Score (0-100):** from signals each too weak to act on alone - little active time, joined in a burst, look-alike names and identical clients (locale, version, mods, colour, device) within that burst, no snapshot or no movement since joining, a short digit name, a VPN/hosting address, taking part in a coordinated vote or chat flood, a flag - lowered by active time, several days, a passed challenge; admins are 0. It never kicks anyone: it only keeps a player out of votes. `blockipinfo` shows it with its parts.
+*   **Raid Mode, for Everyone:** `raidJoins` joins of players not yet trusted from different addresses within `raidJoinSeconds` (counted once they join, so bare connect packets, fresh uuids closed before loading the map and banned bots retrying count nothing; uuids past `voteMinActiveMinutes` active in the last 15 minutes, back after a restart, do not count; a burst counts only when at least half of it shares one client fingerprint or look-alike names, so regulars moving over from a crashed sibling server do not), a coordinated vote, a chat flood or `blockipraid on` turn it on for `raidHoldMinutes`. A join burst while it is on extends it; a coordinated vote or chat flood only starts it, since bots that passed this raid's challenge are not asked again and could otherwise hold it on for good. While on, every low-trust join, and the low-trust players already in game who came with the burst or took part (or take part while it is on), must walk a few steps - the buttons appear only then, so a script cannot answer before moving - and press the right one within `raidChallengeSeconds`; only trusted players vote. A player challenged while controlling a turret may respawn to get a unit that walks. A failure is a kick, a block at accept and a flag, not an engine ban (one challenged at connect that never finishes loading the map is flagged, but only a VPN address is blocked: a residential or mobile one may be a carrier NAT shared with other players): a raider has thousands of addresses, and each ban is more lines in the Discord feed.
+*   **Chat Floods:** the same line (colours, case, spaces, punctuation, zero-width and icon glyphs ignored) from `chatFloodSenders` low-trust players within `chatFloodSeconds` is dropped and marks them - all but the first, so bots echoing a newcomer do not mark the newcomer, even when the newcomer says it again; from `chatFloodRaidSenders`, raid mode. Every low-trust player counts: bots that walked a minute each and joined a few at a time are low trust and nothing else; a newcomer echoing them loses that line and is marked, which a person shrugs off (raid mode asks them to walk and press a button). For the first `trustedDays` days only players who already look like raiders or have no active minute count. Lines of up to three characters ("gg", "da", "+") need twice as many. Players past the vote minimum are never dropped.
 *   **GeoIP Blocking:** Automatically kick players connecting from specific countries using the MaxMind GeoLite2 database.
 *   **Refused Means Refused for a While:** an address kicked for its VPN or country is also blocked at accept for `blockSeconds`, so its retries cost nothing.
 *   **Dual Whitelisting:**
@@ -97,7 +102,26 @@ When generated, the file looks like this:
 "duplicateKickText": "Too many players are connected from your address.",
 "maxConnectionsPerIp": 4,
 "connectionWindowMs": 1000,
-"blockSeconds": 60
+"blockSeconds": 60,
+"voteCommands": ["votekick", "vote", "evotekick", "evote", "rtv", "votemap"],
+"voteStartMinutes": 20,
+"voteCastMinutes": 10,
+"voteMinActiveMinutes": 30,
+"voteMaxSuspicion": 50,
+"trustedTargetShare": 0.4,
+"voteRefusedText": "[scarlet]You cannot vote yet:[] play a while on this server first.",
+"trustedMinutes": 120,
+"trustedDays": 2,
+"coordinatedCommands": 3,
+"coordinatedSeconds": 3,
+"raidJoins": 6,
+"raidJoinSeconds": 30,
+"raidHoldMinutes": 10,
+"raidChallengeSeconds": 90,
+"raidMoveText": "[scarlet]Anti-bot check:[] walk a few steps with your unit, and a button will appear. Press the one it asks for.",
+"chatFloodSenders": 3,
+"chatFloodRaidSenders": 5,
+"chatFloodSeconds": 10
 }
 ```
 
@@ -109,7 +133,7 @@ A file written by an older version gets the new keys added, with these defaults,
 | :--- | :--- |:-------------------------------------------------------------------------------------|
 | `blockedCountries` | Array | A list of 2-letter ISO-3166 country codes to block (e.g., `["CN", "RU"]`).           |
 | `ipWhiteList` | Array | IPs that skip every check, flood limits included (e.g., a shared NAT address). |
-| `uuidWhiteList` | Array | Mindustry Client UUIDs that skip the join checks (country, VPN, player cap). |
+| `uuidWhiteList` | Array | Mindustry Client UUIDs that skip the join checks (country, VPN, player cap), raid mode and the vote gate. |
 | `kickText` | String | The message shown to a player from a blocked country. |
 | `vpnMode` | String | `off`, `auto` or `always`, see Hosting / VPN Blocking above. A value it does not know means `auto`. |
 | `vpnMinPlayers` | Number | In `auto`, VPN joins are refused while at least this many players are online; `0` turns this rule off. |
@@ -128,6 +152,20 @@ A file written by an older version gets the new keys added, with these defaults,
 | `maxConnectionsPerIp` | Number | Connections one address may open per window; `0` turns flood limits off. |
 | `connectionWindowMs` | Number | The window for `maxConnectionsPerIp`, in milliseconds. |
 | `blockSeconds` | Number | How long an address that broke a rule is refused at accept. |
+| `voteCommands` | Array | The client commands the vote gate covers; names not registered are ignored. |
+| `voteStartMinutes` | Number | Active minutes a player needs to start a kick vote. |
+| `voteCastMinutes` | Number | Active minutes a player needs to cast a vote or start any other. |
+| `voteMinActiveMinutes` | Number | Under this many active minutes a player is *low trust*: challenged by raid mode, counted for chat floods. |
+| `trustedTargetShare` | Number | A kick of a trusted player needs this share of the active players voting yes (three at least); any kick needs one of them trusted. |
+| `voteMaxSuspicion` | Number | A suspicion score this high or higher keeps a player out of votes. |
+| `voteRefusedText` | String | What a refused voter is told. |
+| `trustedMinutes`, `trustedDays` | Number | Active minutes, over at least this many days, that make a player *trusted*: never challenged by raid mode, able to vote during it, the only ones who start Essentials' votes, and needed as a yes voter for any vanilla kick. |
+| `coordinatedCommands`, `coordinatedSeconds` | Number | The same vote command (whatever its arguments) from this many players not yet trusted who already look like raiders (not those short of minutes only), within this many seconds, starts raid mode; `0` turns it off. |
+| `raidJoins`, `raidJoinSeconds` | Number | Joins of players not yet trusted from this many addresses within this many seconds start raid mode; `0` turns joins off as a trigger. Only completed joins count, so refused retries and bare connects cannot hold it open. |
+| `raidHoldMinutes` | Number | How long raid mode stays on after its last trigger. |
+| `raidChallengeSeconds` | Number | Time for a raid-mode challenge: walk a few steps, then press. |
+| `raidMoveText` | String | What a player challenged by raid mode is told (chat and an on-screen notice). |
+| `chatFloodSenders`, `chatFloodRaidSenders`, `chatFloodSeconds` | Number | The same chat line from this many low-trust players within `chatFloodSeconds` is dropped, from `chatFloodRaidSenders` it starts raid mode; twice as many for lines of up to three characters. `0` turns either off. |
 
 ## 💻 Commands
 
@@ -136,13 +174,27 @@ All commands are intended for the **Server Console**.
 | Command | Arguments | Description |
 | :--- | :--- | :--- |
 | `blockipreload` | *(none)* | Reloads `config.json` and `ip.mmdb`, and downloads the VPN list again when it is on. |
-| `blockipstats` | *(none)* | Shows the VPN mode and whether a burst is on, the list size, GeoIP status, blocked addresses and whether the connect filter is installed. |
+| `blockipstats` | *(none)* | Shows the VPN mode and whether a burst is on, the list size, GeoIP status, blocked addresses and whether the connect filter is installed; then raid mode (its reason and time left), trust records and flags, challenges waiting and players tracked. |
+| `blockipinfo` | `<name\|uuid>` | An online player (by uuid, or name without colours) or a stored uuid: active minutes, days, first and last seen, flag, trust level, the suspicion score with its parts, and whether the vote gate lets them vote. |
+| `blockipunflag` | `<uuid>` | Lifts the flag a failed challenge put on a uuid. |
+| `blockipraid` | `<on\|off>` | `on`: raid mode until `blockipraid off`. `off`: ends it now. |
 | `addcountry` | `<country_code>` | Adds a 2-letter code to the blocklist (e.g., `addcountry US`). |
 | `removecountry` | `<country_code>` | Removes a country code from the blocklist. |
 | `addwhitelist` | `<ip>` | Adds an IP address to the whitelist. |
 | `removewhitelist` | `<ip>` | Removes an IP address from the whitelist. |
 | `adduuid` | `<uuid>` | Adds a player UUID to the whitelist. |
 | `removeuuid` | `<uuid>` | Removes a player UUID from the whitelist. |
+
+## 📣 Raid Events for Other Plugins
+
+When raid mode starts and ends, BlockIp fires a plain `String` through Arc's `Events`, so another plugin (ServerAdminer, which alerts Discord) can listen without either jar depending on the other:
+
+*   `BlockIp:raid:start:<reason>` - `<reason>` is one of `join burst`, `coordinated votes`, `chat flood`, `manual`. Never a name, address or uuid.
+*   `BlockIp:raid:end` - exactly once after each start, when the hold runs out or on `blockipraid off`.
+
+```java
+Events.on(String.class, text -> { if (text.startsWith("BlockIp:raid:")) ... });
+```
 
 ## ❓ Troubleshooting
 

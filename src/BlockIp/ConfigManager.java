@@ -31,6 +31,7 @@ public class ConfigManager {
     private static final Fi CONFIG_FILE = CONFIG_DIR.child("config.json");
     private static final Fi DB_FILE = CONFIG_DIR.child("ip.mmdb");
     static final Fi VPN_CACHE = CONFIG_DIR.child("vpn-ipv4.txt");
+    static final Fi TRUST_FILE = CONFIG_DIR.child("trust.txt");
 
     // Arc's own Json instead of a bundled Jackson: nothing extra on the classpath or in metaspace
     private static final Json json = new Json(OutputType.json);
@@ -91,6 +92,50 @@ public class ConfigManager {
         public int blockSeconds = 60;
 
         /**
+         * Votes. The vanilla votekick passes on three yes votes, and a raider brought seventeen bots that had
+         * idled long enough to beat a playtime gate. So starting a kick vote needs voteStartMinutes active
+         * minutes (moving or building, which idling does not earn), casting any vote or starting another
+         * voteCastMinutes, and both a suspicion score below the max; during raid mode only trusted players
+         * vote. A kick passes only once a trusted player votes for it, and of a trusted player once the yes votes
+         * reach trustedTargetShare of the active players (three at least); Essentials' votes take a trusted starter. voteMinActiveMinutes is who counts
+         * as low trust: challenged in raid mode, watched for chat floods. Admins always may vote. These
+         * commands are gated, whichever of them is registered.
+         */
+        public ArrayList<String> voteCommands = new ArrayList<>(List.of("votekick", "vote", "evotekick", "evote", "rtv", "votemap"));
+        public int voteStartMinutes = 20;
+        public int voteCastMinutes = 10;
+        public int voteMinActiveMinutes = 30;
+        public int voteMaxSuspicion = 50;
+        public double trustedTargetShare = 0.4;
+        public String voteRefusedText = "[scarlet]You cannot vote yet:[] play a while on this server first.";
+        /**
+         * Trusted: this many active minutes over at least this many days, a day apart. Trusted players are never
+         * challenged by raid mode, vote during it, and are hard to kick.
+         */
+        public int trustedMinutes = 120;
+        public int trustedDays = 2;
+        /** The same vote command from this many players not yet trusted within this many seconds is an attack: raid mode. */
+        public int coordinatedCommands = 3;
+        public int coordinatedSeconds = 3;
+
+        /**
+         * Raid mode: this many joins not yet trusted from different addresses within raidJoinSeconds (0 turns joins
+         * off as a trigger), a coordinated vote or a chat flood start it for raidHoldMinutes, extended while
+         * triggers go on. While on, every low-trust join, and the low-trust players who came in with the
+         * burst, must walk a few steps and then press the button within raidChallengeSeconds.
+         */
+        public int raidJoins = 6;
+        public int raidJoinSeconds = 30;
+        public int raidHoldMinutes = 10;
+        public int raidChallengeSeconds = 90;
+        public String raidMoveText = "[scarlet]Anti-bot check:[] walk a few steps with your unit, and a button will appear. Press the one it asks for.";
+
+        /** The same chat line from this many low-trust players within chatFloodSeconds is dropped; from chatFloodRaidSenders, raid mode. Short lines need twice as many. */
+        public int chatFloodSenders = 3;
+        public int chatFloodRaidSenders = 5;
+        public int chatFloodSeconds = 10;
+
+        /**
          * A key written as null reads back as null, and a null kick text reaches NetConnection.kick,
          * which throws on it inside the connect handler. Nulls take the defaults instead.
          */
@@ -111,6 +156,10 @@ public class ConfigManager {
             if (challengeTitle == null) challengeTitle = defaults.challengeTitle;
             if (challengeText == null) challengeText = defaults.challengeText;
             if (challengeFailText == null) challengeFailText = defaults.challengeFailText;
+            if (voteCommands == null) voteCommands = defaults.voteCommands;
+            if (voteRefusedText == null) voteRefusedText = defaults.voteRefusedText;
+            if (raidMoveText == null) raidMoveText = defaults.raidMoveText;
+            voteCommands.removeIf(name -> name == null);
             blockedCountries.remove(null);
             ipWhiteList.remove(null);
             uuidWhiteList.remove(null);
