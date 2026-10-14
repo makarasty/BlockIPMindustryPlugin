@@ -69,9 +69,49 @@ class SessionTest {
 
         s.sample(7, 100, 100, SPEED, 2_000, 2_000);
         s.minuteAction = true;
-        assertTrue(s.takeMinute(0));
+        assertFalse(s.takeMinute(0), "a snapshot and an action, standing still");
+
+        s.sample(7, 100, 100, SPEED, 3_000, 4_000);
+        s.sample(7, 108, 100, SPEED, 4_000, 6_000);
+        s.minuteAction = true;
+        assertTrue(s.takeMinute(0), "a tile of movement with it");
         s.minuteAction = true;
         assertFalse(s.takeMinute(0), "the snapshot has to be this minute's");
+    }
+
+    @Test
+    void steppingBackAndForthGoesNowhere() {
+        Session s = session();
+        for (int i = 1; i <= 30; i++) s.sample(7, i % 2 == 0 ? 30 : 0, 0, SPEED, i * 2_000L, i * 2_000L);
+        assertEquals(30f, s.minuteMoved, 0.01f, "the farthest from the start, not 870 of path");
+        assertFalse(s.takeMinute(60_000));
+        // Next minute measured from where the unit is: walking 40 from there counts
+        for (int i = 31; i <= 35; i++) s.sample(7, 30 + (i - 30) * 10f, 0, SPEED, i * 2_000L, i * 2_000L);
+        assertEquals(50f, s.minuteMoved, 0.01f, "from 30, where the last minute left it");
+        assertTrue(s.takeMinute(120_000));
+    }
+
+    @Test
+    void legsEitherSideOfAJumpDoNotAddUp() {
+        Session s = session();
+        s.sample(1, 0, 0, SPEED, 1, 2_000);
+        s.sample(1, 30, 0, SPEED, 2, 4_000);
+        s.sample(2, 1_000, 0, SPEED, 3, 6_000);
+        s.sample(2, 1_030, 0, SPEED, 4, 8_000);
+        assertEquals(30f, s.minuteMoved, 0.01f, "a respawn, then 30 again: not 60");
+        assertFalse(s.takeMinute(60_000));
+    }
+
+    @Test
+    void theChallengeWalkIsMeasuredFromWhereItBegan() {
+        Session s = session();
+        s.sample(7, 0, 0, SPEED, 1, 2_000);
+        s.sample(7, 100, 0, SPEED, 2, 4_000);
+        s.startChallenge();
+        for (int i = 3; i <= 20; i++) s.sample(7, i % 2 == 0 ? 100 : 120, 0, SPEED, i, i * 2_000L);
+        assertEquals(20f, s.challengeMoved, 0.01f, "jitter of 20 is under the 24 a walk needs");
+        s.sample(7, 130, 0, SPEED, 21, 42_000);
+        assertTrue(s.challengeMoved >= Tuning.Movement.CHALLENGE_DISTANCE);
     }
 
     @Test

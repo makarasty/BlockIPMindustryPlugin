@@ -4,14 +4,19 @@ package BlockIp;
  * One online player, from join to leave: what they joined with and how far their unit really moved.
  * Movement counts only from fresh client snapshots, so a headless bot that never sends one earns
  * nothing even while units pushing into it shove it about; a jump no unit could make between two
- * samples (a respawn, a teleport, a forged position) counts nothing either. Pure state; BlockPlugin
- * feeds it. Main thread only.
+ * samples (a respawn, a teleport, a forged position) counts nothing either. Movement is displacement,
+ * the farthest the unit got from where the minute (or the challenge) found it, not the path walked:
+ * stepping back and forth between two points goes nowhere. After a jump the unit is measured again from
+ * where it landed, and only a farther reach than before counts, so legs either side of jumps never add up.
+ * Pure state; BlockPlugin feeds it. Main thread only.
  */
 final class Session {
     /** Distance (world units, 8 per tile) a minute needs to count as active: a few tiles of walking. */
     static final float ACTIVE_DISTANCE = Tuning.Movement.ACTIVE_DISTANCE;
     /** A player with no active minute for this long is away: not counted among the players a kick vote needs. */
     static final long AFK_MS = Tuning.Movement.AFK_MS;
+    /** Distance a minute with an action needs as well, so an action packet and a snapshot alone do not make it. */
+    static final float ACTION_DISTANCE = Tuning.Movement.ACTION_DISTANCE;
 
     final String uuid, address, name;
     final long joined;
@@ -25,6 +30,7 @@ final class Session {
     final boolean botLike;
 
     boolean snapshot;
+    /** The farthest the unit got this minute and this challenge from where they began; moved sums the minutes. */
     float moved, minuteMoved, challengeMoved;
     /** This minute: something built, broken or configured, and a fresh snapshot from the client. */
     boolean minuteAction, minuteSnapshot;
@@ -36,6 +42,8 @@ final class Session {
 
     private int unitId = -1;
     private float x, y;
+    /** Where this minute's and this challenge's displacement is measured from. */
+    private float minuteX, minuteY, challengeX, challengeY;
     private long clientTime, sampledAt;
 
     Session(String uuid, String address, String name, long joined, int fingerprint, boolean vpn, boolean burstJoin) {
@@ -63,15 +71,17 @@ final class Session {
         clientTime = lastClientTime;
         snapshot |= fresh;
         minuteSnapshot |= fresh;
-        if (fresh && unitId == this.unitId) {
-            float step = (float) Math.hypot(x - this.x, y - this.y);
-            float max = speed * 60f * elapsed / 1000f * Tuning.Movement.SPEED_SLACK + Tuning.Movement.STEP_SLACK;
-            if (step <= max) {
-                moved += step;
-                minuteMoved += step;
-                challengeMoved += step;
-            }
+        float step = (float) Math.hypot(x - this.x, y - this.y);
+        float max = speed * 60f * elapsed / 1000f * Tuning.Movement.SPEED_SLACK + Tuning.Movement.STEP_SLACK;
+        if (!fresh || unitId != this.unitId || step > max) {
+            // Not the player's own move: measure again from here
+            minuteX = challengeX = x;
+            minuteY = challengeY = y;
         }
+        float minute = Math.max(minuteMoved, (float) Math.hypot(x - minuteX, y - minuteY));
+        moved += minute - minuteMoved;
+        minuteMoved = minute;
+        challengeMoved = Math.max(challengeMoved, (float) Math.hypot(x - challengeX, y - challengeY));
         this.unitId = unitId;
         this.x = x;
         this.y = y;
@@ -87,20 +97,34 @@ final class Session {
         unitId = -1;
     }
 
+    /** A raid challenge's walk starts here, from where the unit is now. */
+    void startChallenge() {
+        challengeMoved = 0;
+        challengeX = x;
+        challengeY = y;
+    }
+
     /** Not active this minute, nor in any minute that ended within {@link #AFK_MS}. */
     boolean afk(long now) {
-        return now - lastActive > AFK_MS && minuteMoved < ACTIVE_DISTANCE && !(minuteAction && minuteSnapshot);
+        return now - lastActive > AFK_MS && !activeMinute();
+    }
+
+    /** Walked, or acted and moved a little while its client sent snapshots this minute. */
+    private boolean activeMinute() {
+        return minuteMoved >= ACTIVE_DISTANCE || minuteAction && minuteSnapshot && minuteMoved >= ACTION_DISTANCE;
     }
 
     /**
-     * At the minute: whether it was active (walked, or acted while its client sent snapshots), and a fresh
-     * minute starts. An action alone is a packet a script can send with no unit, no client and no game.
+     * At the minute: whether it was active (see {@link #activeMinute}), and a fresh minute starts, measured from
+     * where the unit is now. An action alone is a packet a script can send with no unit, no client and no game.
      */
     boolean takeMinute(long now) {
-        boolean active = minuteAction && minuteSnapshot || minuteMoved >= ACTIVE_DISTANCE;
+        boolean active = activeMinute();
         if (active) lastActive = now;
         minuteAction = minuteSnapshot = false;
         minuteMoved = 0;
+        minuteX = x;
+        minuteY = y;
         return active;
     }
 }

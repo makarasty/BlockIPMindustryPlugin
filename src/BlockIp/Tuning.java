@@ -117,10 +117,12 @@ final class Tuning {
         private Movement() {
         }
 
-        /** Distance (world units, 8 per tile) a minute needs to count as active: a few tiles of walking. */
+        /** Distance (world units, 8 per tile) a minute needs to count as active: five tiles from where it began. */
         static final float ACTIVE_DISTANCE = 40f;
-        /** Distance (world units) that shows a challenged player can move: three tiles. */
+        /** Distance (world units) that shows a challenged player can move: three tiles from where the challenge found them. */
         static final float CHALLENGE_DISTANCE = 24f;
+        /** Distance (world units) a minute with a build, break or config also needs to count as active: one tile. */
+        static final float ACTION_DISTANCE = 8f;
         /** Head room over the unit's top speed before a step reads as a teleport (factor). */
         static final float SPEED_SLACK = 1.5f;
         /** Flat head room (world units) added to the largest step a unit could make between two samples. */

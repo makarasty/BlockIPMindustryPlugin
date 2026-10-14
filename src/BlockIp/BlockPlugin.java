@@ -463,7 +463,7 @@ public class BlockPlugin extends Plugin {
         String uuid = player.uuid();
         ConfigManager.ConfigData config = ConfigManager.settings();
         Session session = sessions.get(uuid);
-        if (session != null) session.challengeMoved = 0;
+        if (session != null) session.startChallenge();
         String move = Texts.local(config.raidMoveText, player.locale);
         player.sendMessage(move);
         Call.announce(player.con, move);
