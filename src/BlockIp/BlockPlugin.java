@@ -61,7 +61,7 @@ public class BlockPlugin extends Plugin {
     private final LinkedHashMap<String, Arrival> arrivals = new LinkedHashMap<>() {
         @Override
         protected boolean removeEldestEntry(Map.Entry<String, Arrival> eldest) {
-            return size() > MAX_ARRIVALS;
+            return size() > Tuning.Plugin.MAX_ARRIVALS;
         }
     };
     /** The connect packet just let through, until vanilla's own checks finish with it in the same handler. */
@@ -87,9 +87,6 @@ public class BlockPlugin extends Plugin {
     private record Admitted(NetConnection connection, int fingerprint, boolean lowTrust, boolean untrusted, boolean vpnChallenge) {
     }
 
-    private static final int MAX_ARRIVALS = 1_000, MAX_PASSED_THIS_RAID = 10_000;
-    /** How often the trust file is saved when it changed; shutdown saves it as well. */
-    private static final int SAVE_MINUTES = 10;
     /** Essentials' VoteSystem adds a chat filter of its own while a vote runs; its class name tells it apart. */
     private static final String ESSENTIALS_VOTE = "essential.core.service.vote.VoteSystem";
     /**
@@ -138,8 +135,8 @@ public class BlockPlugin extends Plugin {
         // Essentials' protect module sets its own filter, without chaining, on every map load. A frame later,
         // after every handler of this event has run, take the slot back with theirs chained behind ours.
         Events.on(WorldLoadEndEvent.class, event -> arc.Core.app.post(this::keepFilter));
-        Timer.schedule(this::minuteTick, 60f, 60f);
-        Timer.schedule(this::sample, 2f, 2f);
+        Timer.schedule(this::minuteTick, Tuning.Timers.MINUTE_TICK_SECONDS, Tuning.Timers.MINUTE_TICK_SECONDS);
+        Timer.schedule(this::sample, Tuning.Timers.SAMPLE_SECONDS, Tuning.Timers.SAMPLE_SECONDS);
 
         // Menus.registerMenu hands out the next free id, so it cannot take one another plugin holds
         menuId = Menus.registerMenu(this::onChallengeAnswer);
@@ -344,9 +341,6 @@ public class BlockPlugin extends Plugin {
         Vars.net.setConnectFilter(filter);
     }
 
-    /** How long a client may take to download the map and join before it is treated as never joining. */
-    private static final int JOIN_GRACE_SECONDS = 180;
-
     /**
      * The deadline set at join covers only clients that join. One challenged at connect that closes
      * before joining, or takes the map and never confirms, is a failure: flagged, and a VPN address blocked.
@@ -354,7 +348,7 @@ public class BlockPlugin extends Plugin {
      * many addresses would pile up, each holding its closed connection's buffers.
      */
     private void dropNeverJoined(long now) {
-        challenge.dropNeverJoined(now, JOIN_GRACE_SECONDS * 1000L, c -> ((NetConnection) c).isConnected(), this::failNeverJoined);
+        challenge.dropNeverJoined(now, Tuning.Challenge.JOIN_GRACE_SECONDS * 1000L, c -> ((NetConnection) c).isConnected(), this::failNeverJoined);
     }
 
     /**
@@ -434,7 +428,7 @@ public class BlockPlugin extends Plugin {
         String[][] rows = {{options[0], options[1]}, {options[2], options[3]}};
         Call.menu(player.con, menuId, Texts.local(config.challengeTitle, player.locale),
                 Texts.local(config.challengeText, player.locale).replace("{word}", challenge.word(uuid)), rows);
-        if (first) deadline(uuid, Math.max(config.challengeSeconds, 5));
+        if (first) deadline(uuid, Math.max(config.challengeSeconds, Tuning.Challenge.MIN_SECONDS));
     }
 
     /**
@@ -465,7 +459,7 @@ public class BlockPlugin extends Plugin {
         String move = Texts.local(config.raidMoveText, player.locale);
         player.sendMessage(move);
         Call.announce(player.con, move);
-        deadline(uuid, Math.max(config.raidChallengeSeconds, 15));
+        deadline(uuid, Math.max(config.raidChallengeSeconds, Tuning.Challenge.MIN_RAID_SECONDS));
     }
 
     /**
@@ -485,7 +479,7 @@ public class BlockPlugin extends Plugin {
             }
             Unit unit = player.unit();
             session.sample(unit.id, unit.x, unit.y, unit.speed(), player.con.lastReceivedClientTime, now);
-            if (session.challengeMoved >= Session.CHALLENGE_DISTANCE && challenge.waitsForMove(player.uuid())) {
+            if (session.challengeMoved >= Tuning.Movement.CHALLENGE_DISTANCE && challenge.waitsForMove(player.uuid())) {
                 showChallenge(player, false);
             }
         });
@@ -745,7 +739,7 @@ public class BlockPlugin extends Plugin {
                 || !chorusVoice(uuid, now, config, true)) return text;
         String key = Chorus.chatKey(text);
         if (key.isEmpty()) return text;
-        int times = key.length() <= 3 ? 2 : 1;
+        int times = key.length() <= Tuning.Chat.SHORT_LINE_MAX_LENGTH ? Tuning.Chat.SHORT_LINE_SENDER_FACTOR : 1;
         long window = config.chatFloodSeconds * 1000L;
         boolean again = chatChorus.heard(key, uuid, now, window);
         Set<String> senders = chatChorus.add(key, uuid, now, window);
@@ -887,7 +881,7 @@ public class BlockPlugin extends Plugin {
                 trust.unflag(player.uuid());
                 Session session = sessions.get(player.uuid());
                 if (session != null) session.passedChallenge = true;
-                if (raid.active(Time.millis()) && passedThisRaid.size() < MAX_PASSED_THIS_RAID) passedThisRaid.add(player.uuid());
+                if (raid.active(Time.millis()) && passedThisRaid.size() < Tuning.Plugin.MAX_PASSED_THIS_RAID) passedThisRaid.add(player.uuid());
             }
             case fail -> failChallenge(player);
             case reshow -> showChallenge(player, false);
@@ -910,7 +904,7 @@ public class BlockPlugin extends Plugin {
         boolean vpn = VpnList.contains(player.ip());
         if (vpn) FloodGuard.block(player.ip(), System.currentTimeMillis() + config.blockSeconds * 1000L);
         // 0 for the rest: not even vanilla's 30 s recent-kick hold on the shared address
-        if (player.con != null && player.con.isConnected()) player.con.kick(Texts.local(config.challengeFailText, player.locale), vpn ? 30_000L : 0L);
+        if (player.con != null && player.con.isConnected()) player.con.kick(Texts.local(config.challengeFailText, player.locale), vpn ? Tuning.Challenge.VPN_FAIL_KICK_MS : 0L);
     }
 
     /**
@@ -936,13 +930,13 @@ public class BlockPlugin extends Plugin {
             if (session.takeMinute(now)) trust.active(session.uuid, now);
         }
         // Not each minute: the store is copied on this thread and written whole, to change a few dozen rows
-        if (++minutesSinceSave >= SAVE_MINUTES) {
+        if (++minutesSinceSave >= Tuning.Timers.SAVE_MINUTES) {
             minutesSinceSave = 0;
             saveTrust();
         }
 
         // A challenge for someone who never finished joining is dropped after a few minutes
-        challenge.sweep(now, 5 * 60_000L);
+        challenge.sweep(now, Tuning.Timers.STALE_CHALLENGE_MS);
 
         int refused = FloodGuard.refused.getAndSet(0);
         if (refused + kickedCountry + kickedVpn + kickedDuplicate + challenged > 0) {

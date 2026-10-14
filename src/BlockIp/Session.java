@@ -9,14 +9,9 @@ package BlockIp;
  */
 final class Session {
     /** Distance (world units, 8 per tile) a minute needs to count as active: a few tiles of walking. */
-    static final float ACTIVE_DISTANCE = 40f;
-    /** Distance that shows a challenged player can move: three tiles. */
-    static final float CHALLENGE_DISTANCE = 24f;
-    /** Head room over the unit's top speed before a step reads as a teleport. */
-    private static final float SPEED_SLACK = 1.5f;
-    private static final float STEP_SLACK = 8f;
+    static final float ACTIVE_DISTANCE = Tuning.Movement.ACTIVE_DISTANCE;
     /** A player with no active minute for this long is away: not counted among the players a kick vote needs. */
-    static final long AFK_MS = 5 * 60_000L;
+    static final long AFK_MS = Tuning.Movement.AFK_MS;
 
     final String uuid, address, name;
     final long joined;
@@ -70,7 +65,7 @@ final class Session {
         minuteSnapshot |= fresh;
         if (fresh && unitId == this.unitId) {
             float step = (float) Math.hypot(x - this.x, y - this.y);
-            float max = speed * 60f * elapsed / 1000f * SPEED_SLACK + STEP_SLACK;
+            float max = speed * 60f * elapsed / 1000f * Tuning.Movement.SPEED_SLACK + Tuning.Movement.STEP_SLACK;
             if (step <= max) {
                 moved += step;
                 minuteMoved += step;

@@ -26,7 +26,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 final class VpnList {
     /** Per source. The real lists are under 1 MB; anything past this is not a list of networks. Tests lower it. */
-    static long maxSourceChars = 16L << 20;
+    static long maxSourceChars = Tuning.VpnList.MAX_SOURCE_CHARS;
 
     private static volatile IpRanges ranges = IpRanges.EMPTY;
     private static final AtomicBoolean loading = new AtomicBoolean();
@@ -75,8 +75,8 @@ final class VpnList {
         try (BufferedWriter out = new BufferedWriter(partial.writer(false, "UTF-8"))) {
             for (String url : urls) {
                 URLConnection connection = new URL(url).openConnection();
-                connection.setConnectTimeout(15_000);
-                connection.setReadTimeout(30_000);
+                connection.setConnectTimeout(Tuning.VpnList.CONNECT_TIMEOUT_MS);
+                connection.setReadTimeout(Tuning.VpnList.READ_TIMEOUT_MS);
                 connection.setRequestProperty("User-Agent", "BlockIp");
                 if (connection instanceof HttpURLConnection http && http.getResponseCode() / 100 != 2) {
                     throw new IOException(url + " answered " + http.getResponseCode());

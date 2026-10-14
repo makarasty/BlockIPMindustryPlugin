@@ -28,18 +28,18 @@ import java.util.Map;
  * real players' records out either.
  */
 final class TrustStore {
-    static final int MAX_RECORDS = 100_000;
-    static final int MAX_FLAGGED = 20_000;
+    static final int MAX_RECORDS = Tuning.Trust.MAX_RECORDS;
+    static final int MAX_FLAGGED = Tuning.Trust.MAX_FLAGGED;
     /**
      * Records under this many minutes are kept apart, and go first when the store is full: farming new
      * uuids evicts other new uuids, never a veteran, so pushing one out costs a raider this many minutes.
      */
-    static final int PROBATION_MINUTES = 30;
+    static final int PROBATION_MINUTES = Tuning.Trust.PROBATION_MINUTES;
     /**
      * A record on probation not seen for this long is dropped at load, its flag kept: otherwise every
      * passer-by who walked once stays for good, and the store settles at its cap, copied and written whole.
      */
-    static final long PROBATION_KEEP_MS = 30 * 86_400_000L;
+    static final long PROBATION_KEEP_MS = Tuning.Trust.PROBATION_KEEP_MS;
     private static final String HEADER = "BlockIp trust 1";
     private static final long DAY = 86_400_000L;
     /** One save at a time, whether from the minute's daemon thread or from exit. */

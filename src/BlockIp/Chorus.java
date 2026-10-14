@@ -15,9 +15,9 @@ import java.util.Set;
  * dropped, past {@link #MAX_VOICES} senders the oldest. Main thread only.
  */
 final class Chorus {
-    static final int MAX_KEYS = 512;
-    static final int MAX_VOICES = 64;
-    static final int MAX_KEY_LENGTH = 64;
+    static final int MAX_KEYS = Tuning.Chorus.MAX_KEYS;
+    static final int MAX_VOICES = Tuning.Chorus.MAX_VOICES;
+    static final int MAX_KEY_LENGTH = Tuning.Chorus.MAX_KEY_LENGTH;
 
     /**
      * key -> sender -> last heard (ms), in the order first heard; access order, so the eldest key is the least

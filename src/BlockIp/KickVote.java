@@ -61,7 +61,7 @@ final class KickVote {
 
     /** Yes votes a kick of a trusted player needs: {@code share} of the active players, never under three. */
     static int needed(int active, double share) {
-        return Math.max(3, (int) Math.ceil(share * active));
+        return Math.max(Tuning.Votes.MIN_YES_VOTES, (int) Math.ceil(share * active));
     }
 
     /**

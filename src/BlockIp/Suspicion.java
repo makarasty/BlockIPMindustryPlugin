@@ -17,7 +17,7 @@ final class Suspicion {
     }
 
     /** A uuid active this recently is a regular reconnecting (after a restart, say), not part of a burst. */
-    static final long RECONNECT_MS = 15 * 60_000L;
+    static final long RECONNECT_MS = Tuning.Suspicion.RECONNECT_MS;
 
     /**
      * Whether a join counts toward a burst: anyone not yet trusted - a cohort farmed past the vote minimum
@@ -68,11 +68,11 @@ final class Suspicion {
         }
         int score = 0;
         int minutes = record == null ? 0 : record.minutes, days = record == null ? 0 : record.days;
-        if (minutes == 0) score += add(why, 25, "no active time");
-        else if (minutes < c.voteMinActiveMinutes) score += add(why, 15, "under " + c.voteMinActiveMinutes + " active min");
-        else if (minutes < c.trustedMinutes) score += add(why, 10, "not trusted yet");
-        else score += add(why, -30, minutes + " active min");
-        if (days >= c.trustedDays) score += add(why, -15, days + " days");
+        if (minutes == 0) score += add(why, Tuning.Suspicion.NO_ACTIVE_TIME_POINTS, "no active time");
+        else if (minutes < c.voteMinActiveMinutes) score += add(why, Tuning.Suspicion.UNDER_VOTE_MINUTES_POINTS, "under " + c.voteMinActiveMinutes + " active min");
+        else if (minutes < c.trustedMinutes) score += add(why, Tuning.Suspicion.NOT_TRUSTED_POINTS, "not trusted yet");
+        else score += add(why, Tuning.Suspicion.TRUSTED_MINUTES_POINTS, minutes + " active min");
+        if (days >= c.trustedDays) score += add(why, Tuning.Suspicion.TRUSTED_DAYS_POINTS, days + " days");
 
         if (s != null) {
             if (inCohort(s, online, c)) {
@@ -82,20 +82,20 @@ final class Suspicion {
                     if (similar(s.shape, s.plain, o.shape, o.plain)) lookAlike++;
                     if (o.fingerprint == s.fingerprint) sameClient++;
                 }
-                score += add(why, 15, "joined in a burst");
-                if (lookAlike >= 2) score += add(why, 10, lookAlike + " look-alike names");
-                if (sameClient >= 2) score += add(why, 10, sameClient + " identical clients");
+                score += add(why, Tuning.Suspicion.BURST_POINTS, "joined in a burst");
+                if (lookAlike >= Tuning.Suspicion.LOOKALIKE_MIN_COUNT) score += add(why, Tuning.Suspicion.LOOKALIKE_POINTS, lookAlike + " look-alike names");
+                if (sameClient >= Tuning.Suspicion.IDENTICAL_CLIENTS_MIN_COUNT) score += add(why, Tuning.Suspicion.IDENTICAL_CLIENTS_POINTS, sameClient + " identical clients");
             }
             long age = now - s.joined;
-            if (!s.snapshot && age > 20_000) score += add(why, 20, "no client snapshot");
-            else if (s.moved < Session.ACTIVE_DISTANCE && age > 60_000) score += add(why, 10, "has not moved");
-            if (s.botLike) score += add(why, 5, "bot-like name");
-            if (s.vpn) score += add(why, 15, "VPN/hosting");
-            if (s.coordinated > 0) score += add(why, Math.min(s.coordinated, 2) * 15, "coordinated x" + s.coordinated);
-            if (s.passedChallenge) score += add(why, -20, "passed challenge");
+            if (!s.snapshot && age > Tuning.Suspicion.NO_SNAPSHOT_AFTER_MS) score += add(why, Tuning.Suspicion.NO_SNAPSHOT_POINTS, "no client snapshot");
+            else if (s.moved < Session.ACTIVE_DISTANCE && age > Tuning.Suspicion.NOT_MOVED_AFTER_MS) score += add(why, Tuning.Suspicion.NOT_MOVED_POINTS, "has not moved");
+            if (s.botLike) score += add(why, Tuning.Suspicion.BOT_LIKE_NAME_POINTS, "bot-like name");
+            if (s.vpn) score += add(why, Tuning.Suspicion.VPN_POINTS, "VPN/hosting");
+            if (s.coordinated > 0) score += add(why, Math.min(s.coordinated, Tuning.Suspicion.COORDINATED_MAX_TIMES) * Tuning.Suspicion.COORDINATED_POINTS_EACH, "coordinated x" + s.coordinated);
+            if (s.passedChallenge) score += add(why, Tuning.Suspicion.PASSED_CHALLENGE_POINTS, "passed challenge");
         }
-        if (flagged) score += add(why, 50, "flagged");
-        return Math.max(0, Math.min(100, score));
+        if (flagged) score += add(why, Tuning.Suspicion.FLAGGED_POINTS, "flagged");
+        return Math.max(0, Math.min(Tuning.Suspicion.MAX_SCORE, score));
     }
 
     private static int add(StringBuilder why, int points, String reason) {
@@ -107,7 +107,7 @@ final class Suspicion {
     /** Short, letters and digits only, at least half digits: "004m", "0016". "k" or "svo" are not. */
     static boolean botLikeName(String name) {
         String plain = Strings.stripColors(name);
-        if (plain.length() < 2 || plain.length() > 6) return false;
+        if (plain.length() < Tuning.Names.BOT_LIKE_MIN_LENGTH || plain.length() > Tuning.Names.BOT_LIKE_MAX_LENGTH) return false;
         int digits = 0;
         for (int i = 0; i < plain.length(); i++) {
             char ch = plain.charAt(i);
@@ -129,8 +129,8 @@ final class Suspicion {
 
     /** {@link #shape} of a name already made {@link #plain}. */
     static String shapeOf(String plain) {
-        StringBuilder shape = new StringBuilder(Math.min(plain.length(), 16));
-        for (int i = 0; i < plain.length() && i < 16; i++) {
+        StringBuilder shape = new StringBuilder(Math.min(plain.length(), Tuning.Names.SHAPE_MAX_LENGTH));
+        for (int i = 0; i < plain.length() && i < Tuning.Names.SHAPE_MAX_LENGTH; i++) {
             char ch = plain.charAt(i);
             shape.append(Character.isDigit(ch) ? '9' : Character.isLetter(ch) ? 'a' : ch);
         }
@@ -148,8 +148,9 @@ final class Suspicion {
     /** {@link #similar(String, String, String)} on names made {@link #plain} and their shapes, computed once per name. */
     static boolean similar(String shape, String plain, String otherShape, String otherPlain) {
         if (shape.indexOf('9') >= 0 && shape.equals(otherShape)) return true;
-        return plain.length() == otherPlain.length() && plain.length() <= 8 && plain.length() >= 2
-                && plain.regionMatches(0, otherPlain, 0, 2);
+        return plain.length() == otherPlain.length() && plain.length() <= Tuning.Names.LOOKALIKE_MAX_LENGTH
+                && plain.length() >= Tuning.Names.LOOKALIKE_MIN_LENGTH
+                && plain.regionMatches(0, otherPlain, 0, Tuning.Names.LOOKALIKE_SHARED_PREFIX);
     }
 
     /**

@@ -15,10 +15,8 @@ import java.util.concurrent.atomic.AtomicInteger;
  * opened more connections than the window allows.
  */
 final class FloodGuard {
-    /** Past this many tracked addresses a sweep that frees nothing starts over: a flood from that many is not rate-limitable. */
-    static final int MAX_TRACKED = 10_000;
-    /** A block list this long stops growing; addresses already on it stay blocked until they expire. */
-    static final int MAX_BLOCKED = 50_000;
+    /** See {@link Tuning.FloodGuard#MAX_TRACKED}. */
+    static final int MAX_TRACKED = Tuning.FloodGuard.MAX_TRACKED;
 
     /** address -> blocked until (ms). Written by the main thread as well, when a join is refused. */
     private static final ConcurrentHashMap<String, Long> blocked = new ConcurrentHashMap<>();
@@ -76,7 +74,7 @@ final class FloodGuard {
 
     /** Refuses the address at accept until {@code until}. Returns false when it was blocked already or the list is full. */
     static boolean block(String address, long until) {
-        if (blocked.size() >= MAX_BLOCKED && !blocked.containsKey(address)) return false;
+        if (blocked.size() >= Tuning.FloodGuard.MAX_BLOCKED && !blocked.containsKey(address)) return false;
         Long previous = blocked.put(address, until);
         return previous == null;
     }
@@ -90,7 +88,7 @@ final class FloodGuard {
     }
 
     private static void sweep(long now, long windowMs) {
-        nextSweep = now + Math.max(windowMs, 1_000);
+        nextSweep = now + Math.max(windowMs, Tuning.FloodGuard.MIN_SWEEP_INTERVAL_MS);
         windows.values().removeIf(window -> now - window.start >= windowMs);
         if (windows.size() >= MAX_TRACKED) windows.clear();
         for (Iterator<Map.Entry<String, Long>> it = blocked.entrySet().iterator(); it.hasNext(); ) {

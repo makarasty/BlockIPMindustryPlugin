@@ -19,15 +19,8 @@ final class Challenge {
     static final String[] WORDS = {"apple", "river", "stone", "cloud", "tiger", "piano", "rocket", "candle",
             "forest", "anchor", "silver", "garden", "lemon", "castle", "planet", "bridge"};
     static final int BUTTONS = 4;
-    /**
-     * Clients challenged at connect and still to join, at most: past it, each new one drops the one waiting
-     * longest. Turning the newest away instead let a few dozen clients that take the map and never confirm
-     * hold every place, and every real newcomer was refused. A player challenged in game takes no place:
-     * the player limit bounds those already.
-     */
-    static final int MAX_PENDING = 200;
-    /** Remembered passes past which the oldest are forgotten. */
-    static final int MAX_PASSED = 10_000;
+    /** Clients challenged at connect and still to join, at most; see {@link Tuning.Challenge#MAX_PENDING}. */
+    static final int MAX_PENDING = Tuning.Challenge.MAX_PENDING;
 
     enum Verdict {pass, fail, reshow, none}
 
@@ -163,7 +156,7 @@ final class Challenge {
         String key = uuid + '|' + address;
         passed.remove(key);
         passed.put(key, now + passMs);
-        while (passed.size() > MAX_PASSED) {
+        while (passed.size() > Tuning.Challenge.MAX_PASSED) {
             Iterator<String> oldest = passed.keySet().iterator();
             oldest.next();
             oldest.remove();
