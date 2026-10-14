@@ -159,15 +159,13 @@ final class Tuning {
         static final long VPN_FAIL_KICK_MS = 30_000L;
     }
 
-    /** Votes held back or counted by the vote gate (see {@link KickVote}, {@link BlockIp.BlockPlugin#rtvOpen}). */
+    /** Votes held back or counted by the vote gate (see {@link KickVote}). */
     static final class Votes {
         private Votes() {
         }
 
         /** Yes votes a kick of a trusted player needs, never under this many. */
         static final int MIN_YES_VOTES = 3;
-        /** After the /rtv that opens one, how long others may add theirs without a trusted player; Essentials' default rtv timeout, in ms. */
-        static final long RTV_OPEN_MS = 60_000L;
     }
 
     /** Chat line floods (see {@link Chorus}). */

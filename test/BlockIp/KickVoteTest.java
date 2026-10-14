@@ -66,22 +66,12 @@ class KickVoteTest {
         assertFalse(BlockPlugin.startsUnheldVote("votekick", true), "held instead");
         assertTrue(BlockPlugin.startsUnheldVote("votekick", false));
         assertFalse(BlockPlugin.startsUnheldVote("vote", false));
-        assertTrue(BlockPlugin.startsUnheldVote("rtv", true), "Essentials ends the map at its share of /rtv");
-    }
-
-    @Test
-    void anOpenRtvTakesMoreVotesWithoutATrustedPlayer() {
-        long start = 1_000_000L;
-        assertFalse(BlockPlugin.rtvOpen(0, start), "none opened");
-        assertTrue(BlockPlugin.rtvOpen(start, start));
-        assertTrue(BlockPlugin.rtvOpen(start, start + Tuning.Votes.RTV_OPEN_MS - 1));
-        assertFalse(BlockPlugin.rtvOpen(start, start + Tuning.Votes.RTV_OPEN_MS), "timed out: the next opens a new one");
+        assertFalse(BlockPlugin.startsUnheldVote("rtv", false), "cast rules; trusted-only in a locked raid anyway");
     }
 
     @Test
     void aPlayerAloneMayOnlyChangeTheMapOrSkipWaves() {
         assertTrue(BlockPlugin.harmlessAlone("votemap", new String[]{"3"}));
-        assertTrue(BlockPlugin.harmlessAlone("rtv", new String[0]));
         assertTrue(BlockPlugin.harmlessAlone("evote", new String[]{"map", "3", "r"}));
         assertTrue(BlockPlugin.harmlessAlone("evote", new String[]{"skip", "5"}));
         for (String kind : new String[]{"back", "gg", "draw", "random", "kick", "MAP"}) {

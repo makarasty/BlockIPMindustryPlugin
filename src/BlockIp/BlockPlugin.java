@@ -76,8 +76,6 @@ public class BlockPlugin extends Plugin {
     /** The vote in progress, vanilla's and Essentials', as last seen, and since when (Time.millis). */
     private Object vanillaVote, essentialsVote;
     private long vanillaVoteStart, essentialsVoteStart;
-    /** When the gate let through the /rtv that opened Essentials' rtv (Time.millis), 0 for none; see {@link #rtvOpen}. */
-    private long rtvStart;
     /** The vanilla kick vote whose counter is held (see {@link KickVote}), and how many votes it holds back. */
     private Object heldVote;
     private int heldVotes;
@@ -137,11 +135,7 @@ public class BlockPlugin extends Plugin {
         });
         // Essentials' protect module sets its own filter, without chaining, on every map load. A frame later,
         // after every handler of this event has run, take the slot back with theirs chained behind ours.
-        // A new map ends Essentials' rtv as well
-        Events.on(WorldLoadEndEvent.class, event -> {
-            rtvStart = 0;
-            arc.Core.app.post(this::keepFilter);
-        });
+        Events.on(WorldLoadEndEvent.class, event -> arc.Core.app.post(this::keepFilter));
         Timer.schedule(this::minuteTick, Tuning.Timers.MINUTE_TICK_SECONDS, Tuning.Timers.MINUTE_TICK_SECONDS);
         Timer.schedule(this::sample, Tuning.Timers.SAMPLE_SECONDS, Tuning.Timers.SAMPLE_SECONDS);
 
@@ -555,7 +549,6 @@ public class BlockPlugin extends Plugin {
         String why = voteRefusal(player, "vote".equals(command) && vanillaVote != null ? vanillaVoteStart : 0, raid.votesLocked(now), need);
         if (why == null && !trusted(uuid, config) && needsTrustedStarter(command, args, player, now, config)) why = "needs a trusted player to start";
         if (why == null) {
-            if ("rtv".equals(command) && !rtvOpen(rtvStart, now)) rtvStart = now;
             holdKickVote(command, args, player, now);
             // A vote this starts is seen right after it runs, so its start time is exact
             Core.app.post(this::observeVotes);
@@ -572,12 +565,10 @@ public class BlockPlugin extends Plugin {
      * {@link KickVote#available}. Five bots farmed past the vote minutes are Essentials' majority on a server of
      * eight, so a trusted starter is what keeps them from rolling the map back. While trust is new nobody is
      * trusted, so then only a kick naming a trusted player is held to it. A player alone may still change the map
-     * or skip waves ({@link #harmlessAlone}), but not roll the map back or end the game. Every /rtv is a vote, so
-     * only the one that opens it needs a trusted player; once open, anyone the gate lets vote may add theirs.
+     * or skip waves ({@link #harmlessAlone}), but not roll the map back or end the game.
      */
     private boolean needsTrustedStarter(String command, String[] args, Player caller, long now, ConfigManager.ConfigData config) {
         if (!startsUnheldVote(command, KickVote.available()) || Groups.player.size() <= 1 && harmlessAlone(command, args)) return false;
-        if ("rtv".equals(command) && rtvOpen(rtvStart, now)) return false;
         return !newTrust(now, config) || startsKick(command, args) && kicksTrusted(command, args, caller);
     }
 
@@ -587,25 +578,16 @@ public class BlockPlugin extends Plugin {
      * just left, and not a kick. Essentials matches its subcommand exactly, so this does too.
      */
     static boolean harmlessAlone(String command, String[] args) {
-        return "votemap".equals(command) || "rtv".equals(command)
-                || "evote".equals(command) && args.length > 0 && ("map".equals(args[0]) || "skip".equals(args[0]));
+        return "votemap".equals(command) || "evote".equals(command) && args.length > 0 && ("map".equals(args[0]) || "skip".equals(args[0]));
     }
 
     /**
-     * A vote start whose count BlockPlugin cannot hold back: Essentials' every one, its /rtv included (it ends the
-     * map once a share of the players have typed it), and vanilla's kick unless {@code held}.
+     * A vote start whose count BlockPlugin cannot hold back: Essentials' every one, and vanilla's kick unless
+     * {@code held}. Not /rtv: every /rtv is a vote cast as much as a start, so it follows the cast rules - and in a
+     * raid that locks votes, only trusted players vote at all, so a trusted starter would add nothing there.
      */
     static boolean startsUnheldVote(String command, boolean held) {
-        return "evote".equals(command) || "evotekick".equals(command) || "votemap".equals(command) || "rtv".equals(command)
-                || "votekick".equals(command) && !held;
-    }
-
-    /**
-     * Whether the rtv the gate let open at {@code start} still runs at {@code now}.
-     * shortcut: a fixed window, not Essentials' configured rtv timeout; read that timeout if an owner changes it.
-     */
-    static boolean rtvOpen(long start, long now) {
-        return start != 0 && now - start < Tuning.Votes.RTV_OPEN_MS;
+        return "evote".equals(command) || "evotekick".equals(command) || "votemap".equals(command) || "votekick".equals(command) && !held;
     }
 
     /** See {@link Suspicion#refusedAsRaider}. */
