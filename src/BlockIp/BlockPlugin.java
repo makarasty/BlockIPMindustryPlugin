@@ -207,7 +207,9 @@ public class BlockPlugin extends Plugin {
                     return;
                 }
             }
-        } else if (IpChecker.isBlocked(ip)) {
+        }
+        // For a listed address too: the VPN rules may let it in, and that says nothing about its country
+        if (IpChecker.isBlocked(ip)) {
             kickedCountry++;
             refuse(event, config, config.kickText, "country");
             return;
