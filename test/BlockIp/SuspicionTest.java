@@ -145,6 +145,33 @@ class SuspicionTest {
         assertFalse(Suspicion.similar(Suspicion.shape("Fance"), "Fance", "Athos"));
     }
 
+    /** The comparison before names were worked out once per session, kept to check the cached one against. */
+    private static boolean similarAsBefore(String name, String other) {
+        String shape = Suspicion.shape(name);
+        if (shape.indexOf('9') >= 0 && shape.equals(Suspicion.shape(other))) return true;
+        String a = arc.util.Strings.stripColors(name).toLowerCase(java.util.Locale.ROOT);
+        String b = arc.util.Strings.stripColors(other).toLowerCase(java.util.Locale.ROOT);
+        return a.length() == b.length() && a.length() <= 8 && a.length() >= 2 && a.startsWith(b.substring(0, 2));
+    }
+
+    @Test
+    void sessionNamesCompareAsBefore() {
+        // Colours, mixed case, Cyrillic look-alikes, fullwidth digits, a dotted capital I that lower-cases to two chars
+        String[] names = {"004m", "[red]001s", "[#ff0000]00[]4M", "0016", "ОО4m", "００4m", "Fance", "Athos", "FANCE",
+                "[blue]fa[]nce", "İstan", "istan", "Iİ", "ii", "k", "[red]", "", "x1", "X1", "verylongname123456789",
+                "verylongname123456780", "a b", "a_b", "[[red]]00", "0O0o"};
+        for (String a : names) {
+            Session s = new Session("a", "1", a, 0, 7, false, true);
+            assertEquals(Suspicion.shape(a), s.shape, a);
+            assertEquals(Suspicion.botLikeName(a), s.botLike, a);
+            for (String b : names) {
+                Session o = new Session("b", "2", b, 0, 7, false, true);
+                assertEquals(similarAsBefore(a, b), Suspicion.similar(s.shape, s.plain, o.shape, o.plain), a + " / " + b);
+                assertEquals(similarAsBefore(a, b), Suspicion.similar(Suspicion.shape(a), a, b), a + " / " + b);
+            }
+        }
+    }
+
     @Test
     void startingAKickTakesMoreActiveMinutesThanCastingAVote() {
         // A regular in their first session after the deploy: casts at 10 active minutes, starts a kick at 20

@@ -50,12 +50,11 @@ final class Suspicion {
     static boolean inCohort(Session s, Collection<Session> online, ConfigManager.ConfigData c) {
         if (!s.burstJoin || c.raidJoins <= 0) return false;
         int cohort = 1, sameClient = 1, lookAlike = 1;
-        String shape = shape(s.name);
         for (Session o : online) {
             if (o == s || !o.burstJoin || Math.abs(o.joined - s.joined) > c.raidJoinSeconds * 1000L) continue;
             cohort++;
             if (o.fingerprint == s.fingerprint) sameClient++;
-            if (similar(shape, s.name, o.name)) lookAlike++;
+            if (similar(s.shape, s.plain, o.shape, o.plain)) lookAlike++;
         }
         return cohort >= c.raidJoins && Math.max(sameClient, lookAlike) * 2 >= cohort;
     }
@@ -78,10 +77,9 @@ final class Suspicion {
         if (s != null) {
             if (inCohort(s, online, c)) {
                 int lookAlike = 0, sameClient = 0;
-                String shape = shape(s.name);
                 for (Session o : online) {
                     if (o == s || !o.burstJoin || Math.abs(o.joined - s.joined) > c.raidJoinSeconds * 1000L) continue;
-                    if (similar(shape, s.name, o.name)) lookAlike++;
+                    if (similar(s.shape, s.plain, o.shape, o.plain)) lookAlike++;
                     if (o.fingerprint == s.fingerprint) sameClient++;
                 }
                 score += add(why, 15, "joined in a burst");
@@ -91,7 +89,7 @@ final class Suspicion {
             long age = now - s.joined;
             if (!s.snapshot && age > 20_000) score += add(why, 20, "no client snapshot");
             else if (s.moved < Session.ACTIVE_DISTANCE && age > 60_000) score += add(why, 10, "has not moved");
-            if (botLikeName(s.name)) score += add(why, 5, "bot-like name");
+            if (s.botLike) score += add(why, 5, "bot-like name");
             if (s.vpn) score += add(why, 15, "VPN/hosting");
             if (s.coordinated > 0) score += add(why, Math.min(s.coordinated, 2) * 15, "coordinated x" + s.coordinated);
             if (s.passedChallenge) score += add(why, -20, "passed challenge");
@@ -121,7 +119,16 @@ final class Suspicion {
 
     /** Digits as 9, letters as a: "004m" and "001s" are both "999a". */
     static String shape(String name) {
-        String plain = Strings.stripColors(name).toLowerCase(Locale.ROOT);
+        return shapeOf(plain(name));
+    }
+
+    /** What names are compared by: no colours, lower case. */
+    static String plain(String name) {
+        return Strings.stripColors(name).toLowerCase(Locale.ROOT);
+    }
+
+    /** {@link #shape} of a name already made {@link #plain}. */
+    static String shapeOf(String plain) {
         StringBuilder shape = new StringBuilder(Math.min(plain.length(), 16));
         for (int i = 0; i < plain.length() && i < 16; i++) {
             char ch = plain.charAt(i);
@@ -135,9 +142,14 @@ final class Suspicion {
      * ("0016", "004m"). Two plain words of one length ("Fance", "Athos") share a shape but are not alike.
      */
     static boolean similar(String shape, String name, String other) {
-        if (shape.indexOf('9') >= 0 && shape.equals(shape(other))) return true;
-        String a = Strings.stripColors(name).toLowerCase(Locale.ROOT), b = Strings.stripColors(other).toLowerCase(Locale.ROOT);
-        return a.length() == b.length() && a.length() <= 8 && a.length() >= 2 && a.startsWith(b.substring(0, 2));
+        return similar(shape, plain(name), shape(other), plain(other));
+    }
+
+    /** {@link #similar(String, String, String)} on names made {@link #plain} and their shapes, computed once per name. */
+    static boolean similar(String shape, String plain, String otherShape, String otherPlain) {
+        if (shape.indexOf('9') >= 0 && shape.equals(otherShape)) return true;
+        return plain.length() == otherPlain.length() && plain.length() <= 8 && plain.length() >= 2
+                && plain.regionMatches(0, otherPlain, 0, 2);
     }
 
     /**

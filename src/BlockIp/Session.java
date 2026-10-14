@@ -25,6 +25,9 @@ final class Session {
     final boolean vpn;
     /** Counted toward a join burst when it joined: low trust, and not someone reconnecting after a restart. */
     final boolean burstJoin;
+    /** The name as {@link Suspicion} compares it, worked out once: the name never changes in a session. */
+    final String plain, shape;
+    final boolean botLike;
 
     boolean snapshot;
     float moved, minuteMoved, challengeMoved;
@@ -48,6 +51,9 @@ final class Session {
         this.fingerprint = fingerprint;
         this.vpn = vpn;
         this.burstJoin = burstJoin;
+        plain = Suspicion.plain(name);
+        shape = Suspicion.shapeOf(plain);
+        botLike = Suspicion.botLikeName(name);
         sampledAt = joined;
     }
 

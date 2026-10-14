@@ -12,14 +12,15 @@ import java.util.Iterator;
  */
 final class Raid {
     private static final class Join {
-        final String address, name;
+        final String address, plain, shape;
         final int fingerprint;
         final long time;
 
         Join(String address, int fingerprint, String name, long time) {
             this.address = address;
             this.fingerprint = fingerprint;
-            this.name = name;
+            plain = Suspicion.plain(name);
+            shape = Suspicion.shapeOf(plain);
             this.time = time;
         }
     }
@@ -55,10 +56,9 @@ final class Raid {
     private boolean scripted() {
         for (Join j : joins) {
             int sameClient = 0, lookAlike = 0;
-            String shape = Suspicion.shape(j.name);
             for (Join o : joins) {
                 if (o.fingerprint == j.fingerprint) sameClient++;
-                if (o == j || Suspicion.similar(shape, j.name, o.name)) lookAlike++;
+                if (o == j || Suspicion.similar(j.shape, j.plain, o.shape, o.plain)) lookAlike++;
             }
             if (Math.max(sameClient, lookAlike) * 2 >= joins.size()) return true;
         }

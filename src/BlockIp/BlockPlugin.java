@@ -740,8 +740,9 @@ public class BlockPlugin extends Plugin {
         // and joined a few at a time posted theirs unchecked. While trust is new, only no active minute counts
         // Nor one who plays (see Suspicion#playing): five newcomers saying "good game" at map end are not a flood,
         // and walking is what the incident's bots could not do
-        if (config.chatFloodSenders <= 0 || !lowTrust(uuid, config) || !chorusVoice(uuid, now, config, true)
-                || Suspicion.playing(sessions.get(uuid))) return text;
+        // playing() before chorusVoice(): both pure, and the first is a field read where the second scans everyone online
+        if (config.chatFloodSenders <= 0 || !lowTrust(uuid, config) || Suspicion.playing(sessions.get(uuid))
+                || !chorusVoice(uuid, now, config, true)) return text;
         String key = Chorus.chatKey(text);
         if (key.isEmpty()) return text;
         int times = key.length() <= 3 ? 2 : 1;
