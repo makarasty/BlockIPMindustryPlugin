@@ -282,8 +282,11 @@ public class BlockPlugin extends Plugin {
         // A hold that ran out but whose end the minute tick has not announced yet would be extended, with no sweep
         if (raid.ended(now)) onRaidEnd();
         long window = config.raidJoinSeconds * 1000L;
+        // A chorus raid that a burst now joins: votes close to all but trusted players from here on
+        boolean open = raid.active(now) && !raid.votesLocked(now);
         if (raid.join(address, fingerprint, name, now, config.raidJoins, window, holdMs(config))) onRaidStart("join burst");
         if (fresh && raid.newJoin(address, now, config.raidNewJoins, window, holdMs(config))) onRaidStart("new uuid burst");
+        if (open && raid.votesLocked(now)) Log.warn("BlockIp: join burst during raid mode (@): only trusted players vote now", raid.reason());
     }
 
     /** What a script sends the same every time and players differ in: locale, client, mods, colour, device. */
@@ -549,7 +552,7 @@ public class BlockPlugin extends Plugin {
             }
         }
         // Only vanilla's /vote casts into a running vote; Essentials' are cast by chat words, in filterChat
-        String why = voteRefusal(player, "vote".equals(command) && vanillaVote != null ? vanillaVoteStart : 0, raid.active(now), need);
+        String why = voteRefusal(player, "vote".equals(command) && vanillaVote != null ? vanillaVoteStart : 0, raid.votesLocked(now), need);
         if (why == null && !trusted(uuid, config) && needsTrustedStarter(command, args, player, now, config)) why = "needs a trusted player to start";
         if (why == null) {
             if ("rtv".equals(command) && !rtvOpen(rtvStart, now)) rtvStart = now;
@@ -764,7 +767,7 @@ public class BlockPlugin extends Plugin {
         }
         if (isVoteWord(text)) {
             observeVotes();
-            if (essentialsVote != null && voteRefusal(player, essentialsVoteStart, raid.active(now), config.voteCastMinutes) != null) {
+            if (essentialsVote != null && voteRefusal(player, essentialsVoteStart, raid.votesLocked(now), config.voteCastMinutes) != null) {
                 votesRefused++;
                 player.sendMessage(Texts.local(config.voteRefusedText, player.locale));
                 return null;
@@ -869,8 +872,9 @@ public class BlockPlugin extends Plugin {
                     && !Suspicion.inCohort(session, sessions.values(), config)) return;
             if (challengeInGame(player)) asked[0]++;
         });
-        Log.warn("BlockIp: raid mode on (@) @: low-trust joins are challenged and only trusted players vote; challenged @ in game",
-                reason, "manual".equals(reason) ? "until blockipraid off" : "for " + config.raidHoldMinutes + " min", asked[0]);
+        Log.warn("BlockIp: raid mode on (@) @: low-trust joins are challenged and @; challenged @ in game",
+                reason, "manual".equals(reason) ? "until blockipraid off" : "for " + config.raidHoldMinutes + " min",
+                raid.votesLocked(now) ? "only trusted players vote" : "votes follow the normal rules", asked[0]);
         // For ServerAdminer, which alerts Discord, with no compile dependency either way
         Events.fire("BlockIp:raid:start:" + reason);
     }
@@ -1058,7 +1062,8 @@ public class BlockPlugin extends Plugin {
                     ConfigManager.getDbReader() != null ? "loaded" : "missing", FloodGuard.blockedCount(),
                     filter != null && Vars.net.getConnectFilter() == filter ? "installed" : "not installed");
             Log.info("BlockIp: raid mode @, @ trust records (@ flagged), @ challenges waiting, @ players tracked",
-                    raid.active(now) ? "on (" + raid.reason() + ", " + (raid.until() == Long.MAX_VALUE ? "until blockipraid off"
+                    raid.active(now) ? "on (" + raid.reason() + ", " + (raid.votesLocked(now) ? "trusted-only votes" : "votes open")
+                            + ", " + (raid.until() == Long.MAX_VALUE ? "until blockipraid off"
                             : (raid.until() - now) / 60_000 + 1 + " min left") + ")" : "off",
                     trust.size(), trust.flaggedCount(), challenge.pendingCount(), sessions.size());
         });
@@ -1086,8 +1091,8 @@ public class BlockPlugin extends Plugin {
                     trust.isFlagged(uuid) ? ", flagged" : "",
                     trusted(uuid, config) ? "trusted" : lowTrust(uuid, config) ? "low trust" : "known");
             Log.info("BlockIp: suspicion @ (@)@", score, why, player == null ? "" : ", vote: "
-                    + (voteRefusal(player, 0, raid.active(now), config.voteCastMinutes) == null ? "allowed"
-                    : "refused, " + voteRefusal(player, 0, raid.active(now), config.voteCastMinutes)));
+                    + (voteRefusal(player, 0, raid.votesLocked(now), config.voteCastMinutes) == null ? "allowed"
+                    : "refused, " + voteRefusal(player, 0, raid.votesLocked(now), config.voteCastMinutes)));
         });
 
         handler.register("blockipunflag", "<uuid>", "Lift the flag a failed challenge put on a uuid", args -> {

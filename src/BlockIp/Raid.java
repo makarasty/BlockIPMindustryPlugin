@@ -7,7 +7,8 @@ import java.util.Iterator;
  * Raid mode: on while a raid is going on, for everyone, not only VPN addresses - the bots that beat
  * the vote came through residential proxies no list knows. It starts on a burst of joins not yet trusted
  * from distinct addresses, on a coordinated vote, on a chat flood, or by hand, and holds for a while
- * after the last trigger. While on, low-trust joins are challenged and only trusted players vote.
+ * after the last trigger. While on, low-trust joins are challenged; once joins (or an admin) started or extended
+ * it, only trusted players vote too. A chorus alone does not lock votes: regulars not yet trusted keep voting.
  * Holds only the state; BlockPlugin acts on it. Main thread only.
  */
 final class Raid {
@@ -31,6 +32,8 @@ final class Raid {
     private final ArrayDeque<Join> newJoins = new ArrayDeque<>();
     private long until, started;
     private String reason;
+    /** Only trusted players vote: set by every trigger but a chorus, until it ends. */
+    private boolean votesLocked;
 
     /**
      * A join not yet trusted from {@code address}, with its connect {@code fingerprint} and {@code name}. Returns
@@ -88,11 +91,18 @@ final class Raid {
      * end is not announced yet is extended, so every start is followed by exactly one end.
      */
     boolean trigger(String why, long now, long holdMs) {
+        return trigger(why, now, holdMs, true);
+    }
+
+    /** {@code lockVotes}: this trigger keeps votes to trusted players; one that does wins over one that does not. */
+    private boolean trigger(String why, long now, long holdMs, boolean lockVotes) {
         boolean starting = reason == null;
         if (starting) {
             started = now;
             reason = why;
+            votesLocked = false;
         }
+        votesLocked |= lockVotes;
         until = Math.max(until, now + holdMs);
         return starting;
     }
@@ -103,7 +113,7 @@ final class Raid {
      * are not asked again during it and a chorus costs them nothing, so one that extended it held it on for good.
      */
     boolean start(String why, long now, long holdMs) {
-        return reason == null && trigger(why, now, holdMs);
+        return reason == null && trigger(why, now, holdMs, false);
     }
 
     /** On until {@link #stop}. Returns true when this started it. */
@@ -123,6 +133,11 @@ final class Raid {
 
     boolean active(long now) {
         return now < until;
+    }
+
+    /** On, and only trusted players vote (see {@link #trigger}). */
+    boolean votesLocked(long now) {
+        return active(now) && votesLocked;
     }
 
     /** True once, at the first call after the hold ran out; the caller announces the end. */

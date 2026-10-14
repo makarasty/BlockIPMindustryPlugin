@@ -35,6 +35,30 @@ class RaidTest {
     }
 
     @Test
+    void aChorusAloneChallengesButLeavesVotesOpenUntilJoinsCome() {
+        Raid raid = new Raid();
+        assertTrue(raid.start("chat flood", 0, HOLD));
+        assertTrue(raid.active(1));
+        assertFalse(raid.votesLocked(1), "regulars not yet trusted keep voting");
+        for (int i = 0; i < 6; i++) raid.join("9.9.9." + i, 7, "004m", 1_000 + i, 6, WINDOW, HOLD);
+        assertTrue(raid.votesLocked(2_000), "a join burst during it: the stricter rule wins");
+        assertEquals("chat flood", raid.reason());
+        assertFalse(raid.start("coordinated votes", 3_000, HOLD));
+        assertTrue(raid.votesLocked(3_000), "a chorus never loosens it");
+        assertTrue(raid.stop());
+        assertTrue(raid.start("coordinated votes", 4_000, HOLD));
+        assertFalse(raid.votesLocked(4_000), "a new raid starts unlocked");
+        assertFalse(raid.votesLocked(4_000 + HOLD));
+
+        Raid joins = new Raid();
+        for (int i = 0; i < 6; i++) joins.join("1.1.1." + i, 7, "004m", i, 6, WINDOW, HOLD);
+        assertTrue(joins.votesLocked(10));
+        Raid manual = new Raid();
+        manual.startManually(0);
+        assertTrue(manual.votesLocked(1));
+    }
+
+    @Test
     void oneAddressOrSlowJoinsAreNoBurst() {
         Raid raid = new Raid();
         for (int i = 0; i < 30; i++) assertFalse(raid.join("3.3.3.3", 7, "004m", i * 100L, 6, WINDOW, HOLD));
