@@ -176,7 +176,7 @@ public class BlockPlugin extends Plugin {
         // vanilla refuses a uuid already in game anyway, and with it off, forgiving one let a client that
         // repeats its uuid past the cap
         if (config.maxPlayersPerIp > 0 && sameAddress(Vars.net.getConnections(), event.connection) >= config.maxPlayersPerIp) {
-            event.connection.kick(config.duplicateKickText);
+            event.connection.kick(Texts.local(config.duplicateKickText, event.packet.locale));
             kickedDuplicate++;
             return;
         }
@@ -202,7 +202,7 @@ public class BlockPlugin extends Plugin {
                 } else if (why == VpnGuard.Reason.busy) {
                     // The server being full says nothing about this address: no block, it may retry once a slot frees
                     kickedVpn++;
-                    event.connection.kick(config.vpnKickText);
+                    event.connection.kick(Texts.local(config.vpnKickText, event.packet.locale));
                     return;
                 } else if (why != null) {
                     kickedVpn++;
@@ -261,7 +261,7 @@ public class BlockPlugin extends Plugin {
             // This uuid already waits on another connection. No block: that says nothing about this address,
             // and 0, not even vanilla's 30 s recent-kick hold on it, which may be a carrier NAT's
             ConfigManager.ConfigData config = ConfigManager.settings();
-            player.con.kick(a.vpnChallenge ? config.vpnKickText : config.challengeFailText, 0);
+            player.con.kick(Texts.local(a.vpnChallenge ? config.vpnKickText : config.challengeFailText, player.locale), 0);
         }
     }
 
@@ -286,7 +286,7 @@ public class BlockPlugin extends Plugin {
 
     private static void refuse(ConnectPacketEvent event, ConfigManager.ConfigData config, String reason, String kind) {
         String ip = event.connection.address;
-        event.connection.kick(reason);
+        event.connection.kick(Texts.local(reason, event.packet.locale));
         FloodGuard.block(ip, System.currentTimeMillis() + config.blockSeconds * 1000L);
         Log.info("BlockIp: kicked @ (@), blocked for @s", ip, kind, config.blockSeconds);
     }
@@ -302,7 +302,7 @@ public class BlockPlugin extends Plugin {
                         && !ConfigManager.isUuidWhitelisted(p.uuid()) && !ConfigManager.isIpWhitelisted(p.ip())
                         && !challenge.hasPassed(p.uuid(), p.ip(), now),
                 p -> {
-                    p.kick(config.vpnKickText);
+                    p.kick(Texts.local(config.vpnKickText, p.locale));
                     kicked[0]++;
                 });
         vpnAttackLogged = true;
@@ -365,7 +365,12 @@ public class BlockPlugin extends Plugin {
     private void dropForRoom(String uuid, Object c) {
         NetConnection connection = (NetConnection) c;
         // 0: not even vanilla's 30 s recent-kick hold on the address
-        if (connection.isConnected()) connection.kick("Too many players are joining at once. Try again in a minute.", 0);
+        if (connection.isConnected()) connection.kick(Texts.local("Too many players are joining at once. Try again in a minute.", localeOf(connection)), 0);
+    }
+
+    /** The locale a client sent, from a connection that may not have its player yet. */
+    private static String localeOf(NetConnection connection) {
+        return connection.player == null ? null : connection.player.locale;
     }
 
     /** Dropped before joining: closed, or out of time. */
@@ -374,7 +379,7 @@ public class BlockPlugin extends Plugin {
         ConfigManager.ConfigData config = ConfigManager.settings();
         challengesFailed++;
         trust.flag(uuid);
-        if (connection.isConnected()) connection.kick(config.challengeFailText, 0);
+        if (connection.isConnected()) connection.kick(Texts.local(config.challengeFailText, localeOf(connection)), 0);
         // Raid mode challenges residential and mobile addresses too, where one newcomer closing the game while
         // the map loads would shut out everyone behind the same carrier NAT. Only a VPN address is blocked
         if (VpnList.contains(connection.address)) FloodGuard.block(connection.address, System.currentTimeMillis() + config.blockSeconds * 1000L);
@@ -413,8 +418,9 @@ public class BlockPlugin extends Plugin {
 
     private void onLeave(Player player) {
         String uuid = player.uuid();
-        // A real player whose game crashed is flagged too: that costs them a challenge on later joins, until they pass one
-        if (challenge.leave(uuid)) failChallenge(player);
+        // A real player whose game crashed is flagged too: that costs them a challenge on later joins, until they pass one.
+        // Not when the server shuts down, which disconnects everyone after net.dispose() has already cleared server()
+        if (challenge.leave(uuid) && Vars.net.server()) failChallenge(player);
         sessions.remove(uuid);
         trust.seen(uuid, Time.millis());
     }
@@ -426,7 +432,8 @@ public class BlockPlugin extends Plugin {
         if (options == null) return;
         ConfigManager.ConfigData config = ConfigManager.settings();
         String[][] rows = {{options[0], options[1]}, {options[2], options[3]}};
-        Call.menu(player.con, menuId, config.challengeTitle, config.challengeText.replace("{word}", challenge.word(uuid)), rows);
+        Call.menu(player.con, menuId, Texts.local(config.challengeTitle, player.locale),
+                Texts.local(config.challengeText, player.locale).replace("{word}", challenge.word(uuid)), rows);
         if (first) deadline(uuid, Math.max(config.challengeSeconds, 5));
     }
 
@@ -455,8 +462,9 @@ public class BlockPlugin extends Plugin {
         ConfigManager.ConfigData config = ConfigManager.settings();
         Session session = sessions.get(uuid);
         if (session != null) session.challengeMoved = 0;
-        player.sendMessage(config.raidMoveText);
-        Call.announce(player.con, config.raidMoveText);
+        String move = Texts.local(config.raidMoveText, player.locale);
+        player.sendMessage(move);
+        Call.announce(player.con, move);
         deadline(uuid, Math.max(config.raidChallengeSeconds, 15));
     }
 
@@ -498,7 +506,8 @@ public class BlockPlugin extends Plugin {
         if (!(caller instanceof Player player) || !challenge.isPending(player.uuid())) return true;
         ConfigManager.ConfigData config = ConfigManager.settings();
         String word = challenge.word(player.uuid());
-        player.sendMessage(word != null ? config.challengeText.replace("{word}", word) : config.raidMoveText);
+        player.sendMessage(word != null ? Texts.local(config.challengeText, player.locale).replace("{word}", word)
+                : Texts.local(config.raidMoveText, player.locale));
         return false;
     }
 
@@ -544,7 +553,7 @@ public class BlockPlugin extends Plugin {
             return true;
         }
         votesRefused++;
-        player.sendMessage(config.voteRefusedText);
+        player.sendMessage(Texts.local(config.voteRefusedText, player.locale));
         return false;
     }
 
@@ -722,7 +731,7 @@ public class BlockPlugin extends Plugin {
             observeVotes();
             if (essentialsVote != null && voteRefusal(player, essentialsVoteStart, raid.active(now), config.voteCastMinutes) != null) {
                 votesRefused++;
-                player.sendMessage(config.voteRefusedText);
+                player.sendMessage(Texts.local(config.voteRefusedText, player.locale));
                 return null;
             }
         }
@@ -900,7 +909,7 @@ public class BlockPlugin extends Plugin {
         boolean vpn = VpnList.contains(player.ip());
         if (vpn) FloodGuard.block(player.ip(), System.currentTimeMillis() + config.blockSeconds * 1000L);
         // 0 for the rest: not even vanilla's 30 s recent-kick hold on the shared address
-        if (player.con != null && player.con.isConnected()) player.con.kick(config.challengeFailText, vpn ? 30_000L : 0L);
+        if (player.con != null && player.con.isConnected()) player.con.kick(Texts.local(config.challengeFailText, player.locale), vpn ? 30_000L : 0L);
     }
 
     /**

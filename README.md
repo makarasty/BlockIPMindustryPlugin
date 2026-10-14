@@ -127,6 +127,10 @@ When generated, the file looks like this:
 
 A file written by an older version gets the new keys added, with these defaults, on the next load.
 
+Every text a player reads (`*Text`, `challengeTitle`) is shown in Ukrainian or Russian to a client whose
+language is one of those, and in English to everyone else. Only the default English texts are translated: a
+text changed here is shown as written, in every language.
+
 ### Configuration Fields
 
 | Field | Type | Description                                                                          |
