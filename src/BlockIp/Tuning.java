@@ -171,6 +171,8 @@ final class Tuning {
         private Chat() {
         }
 
+        /** Chat from a client that has sent no snapshot this long after joining is dropped (a headless bot); in ms. */
+        static final long NO_SNAPSHOT_GRACE_MS = 5_000L;
         /** A line of up to this many characters ("gg", "da", "+") is a short line. */
         static final int SHORT_LINE_MAX_LENGTH = 3;
         /** A short line needs this many times the senders of a flood. */

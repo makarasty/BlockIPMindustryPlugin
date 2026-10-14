@@ -26,6 +26,16 @@ class SuspicionTest {
         return Suspicion.score(s, r, false, false, online, NOW, CONFIG, new StringBuilder());
     }
 
+    @Test
+    void chatIsAScriptsOnlyFromAClientWithNoSnapshotPastTheGrace() {
+        Session s = new Session("u", "1.1.1.1", "player", NOW, 0, false, false);
+        assertFalse(Suspicion.headless(null, NOW));
+        assertFalse(Suspicion.headless(s, NOW + Tuning.Chat.NO_SNAPSHOT_GRACE_MS), "still loading in");
+        assertTrue(Suspicion.headless(s, NOW + Tuning.Chat.NO_SNAPSHOT_GRACE_MS + 1));
+        s.sample(7, 0, 0, 3f, 1, NOW + 2_000);
+        assertFalse(Suspicion.headless(s, NOW + 60_000), "a snapshot came");
+    }
+
     /** The raid of 2026-10-13: short digit names, one client build, all within seconds, none moving. */
     private static List<Session> raidCohort() {
         List<Session> online = new ArrayList<>();

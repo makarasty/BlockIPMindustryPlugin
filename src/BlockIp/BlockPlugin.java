@@ -44,7 +44,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 public class BlockPlugin extends Plugin {
     // Main thread only, reported and reset by the minute summary
-    private int kickedCountry, kickedVpn, kickedDuplicate, challenged, challengesPassed, challengesFailed, votesRefused, chatDropped;
+    private int kickedCountry, kickedVpn, kickedDuplicate, challenged, challengesPassed, challengesFailed, votesRefused, chatDropped, chatHeadless;
     private Filter filter;
     private final VpnGuard vpnGuard = new VpnGuard();
     private final Challenge challenge = new Challenge(new Random());
@@ -754,6 +754,11 @@ public class BlockPlugin extends Plugin {
         if (player.admin) return text;
         ConfigManager.ConfigData config = ConfigManager.settings();
         long now = Time.millis();
+        // Dropped silently, like a flood. Commands do not come through here; the vote gate asks for a snapshot itself
+        if (Suspicion.headless(sessions.get(uuid), now) && !ConfigManager.isUuidWhitelisted(uuid)) {
+            chatHeadless++;
+            return null;
+        }
         if (isVoteWord(text)) {
             observeVotes();
             if (essentialsVote != null && voteRefusal(player, essentialsVoteStart, raid.active(now), config.voteCastMinutes) != null) {
@@ -976,10 +981,11 @@ public class BlockPlugin extends Plugin {
             Log.info("BlockIp: last minute refused @ connections at accept, kicked @ by country, @ as VPN, @ as duplicates; challenged @ players, @ passed, @ failed",
                     refused, kickedCountry, kickedVpn, kickedDuplicate, challenged, challengesPassed, challengesFailed);
         }
-        if (votesRefused + chatDropped > 0) {
-            Log.info("BlockIp: last minute refused @ votes, dropped @ flooded chat lines", votesRefused, chatDropped);
+        if (votesRefused + chatDropped + chatHeadless > 0) {
+            Log.info("BlockIp: last minute refused @ votes, dropped @ flooded chat lines and @ from clients with no snapshot",
+                    votesRefused, chatDropped, chatHeadless);
         }
-        kickedCountry = kickedVpn = kickedDuplicate = challenged = challengesPassed = challengesFailed = votesRefused = chatDropped = 0;
+        kickedCountry = kickedVpn = kickedDuplicate = challenged = challengesPassed = challengesFailed = votesRefused = chatDropped = chatHeadless = 0;
     }
 
     private static Path trustPath() {

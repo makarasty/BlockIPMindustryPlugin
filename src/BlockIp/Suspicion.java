@@ -31,6 +31,14 @@ final class Suspicion {
                 && (record == null || record.minutes < c.voteMinActiveMinutes || now - record.lastSeen > RECONNECT_MS);
     }
 
+    /**
+     * Joined over {@link Tuning.Chat#NO_SNAPSHOT_GRACE_MS} ago and its client has sent no snapshot: no game is
+     * running behind it, so its chat is a script's. A real client sends them from the moment it is in game.
+     */
+    static boolean headless(Session s, long now) {
+        return s != null && !s.snapshot && now - s.joined > Tuning.Chat.NO_SNAPSHOT_GRACE_MS;
+    }
+
     /** Online, its client sends snapshots and its unit really walked: what a headless bot does not do. */
     static boolean playing(Session s) {
         return s != null && s.snapshot && s.moved >= Session.ACTIVE_DISTANCE;
