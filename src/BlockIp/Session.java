@@ -1,5 +1,7 @@
 package BlockIp;
 
+import arc.struct.IntSet;
+
 /**
  * One online player, from join to leave: what they joined with and how far their unit really moved.
  * Movement counts only from fresh client snapshots, so a headless bot that never sends one earns
@@ -32,8 +34,12 @@ final class Session {
     boolean snapshot;
     /** The farthest the unit got this minute and this challenge from where they began; moved sums the minutes. */
     float moved, minuteMoved, challengeMoved;
-    /** This minute: world actions (built, broken, configured...), and whether a fresh snapshot came from the client. */
-    int minuteActions;
+    /**
+     * This minute: the tiles acted on (built, broken, configured...), and whether a fresh snapshot came from the
+     * client. Tiles, not calls: vanilla checks every queued plan again on every snapshot, so one stuck plan is
+     * hundreds of calls a minute. Capped, past what an active minute needs.
+     */
+    final IntSet minuteTiles = new IntSet();
     boolean minuteSnapshot;
     /** Times this player was one of several sending the same vote command or chat line at once. */
     int coordinated;
@@ -115,8 +121,13 @@ final class Session {
      * a builder stands still and builds at range, a script sending one action a minute does not.
      */
     private boolean activeMinute() {
-        return minuteMoved >= ACTIVE_DISTANCE || minuteSnapshot && minuteActions > 0
-                && (minuteMoved >= ACTION_DISTANCE || minuteActions >= Tuning.Movement.BUILDER_ACTIONS);
+        return minuteMoved >= ACTIVE_DISTANCE || minuteSnapshot && minuteTiles.size > 0
+                && (minuteMoved >= ACTION_DISTANCE || minuteTiles.size >= Tuning.Movement.BUILDER_ACTIONS);
+    }
+
+    /** A world action on the tile at {@code pos} ({@code Tile.pos()}). */
+    void action(int pos) {
+        if (minuteTiles.size < Tuning.Movement.MAX_ACTION_TILES) minuteTiles.add(pos);
     }
 
     /**
@@ -126,7 +137,7 @@ final class Session {
     boolean takeMinute(long now) {
         boolean active = activeMinute();
         if (active) lastActive = now;
-        minuteActions = 0;
+        minuteTiles.clear();
         minuteSnapshot = false;
         minuteMoved = 0;
         minuteX = x;
