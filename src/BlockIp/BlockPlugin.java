@@ -88,6 +88,9 @@ public class BlockPlugin extends Plugin {
     private record Admitted(NetConnection connection, int fingerprint, boolean lowTrust, boolean untrusted, boolean vpnChallenge) {
     }
 
+    /** The running plugin, for {@link #voteRefusal(String, boolean, boolean)}; null until init. */
+    private static volatile BlockPlugin instance;
+
     /** Essentials' VoteSystem adds a chat filter of its own while a vote runs; its class name tells it apart. */
     private static final String ESSENTIALS_VOTE = "essential.core.service.vote.VoteSystem";
     /**
@@ -101,6 +104,7 @@ public class BlockPlugin extends Plugin {
 
     @Override
     public void init() {
+        instance = this;
         try {
             ConfigManager.load();
             Log.info("BlockIp loaded.");
@@ -546,7 +550,7 @@ public class BlockPlugin extends Plugin {
             }
         }
         // Only vanilla's /vote casts into a running vote; Essentials' are cast by chat words, in filterChat
-        String why = voteRefusal(player, "vote".equals(command) && vanillaVote != null ? vanillaVoteStart : 0, raid.votesLocked(now), need);
+        String why = voteRefusal(player, "vote".equals(command) && vanillaVote != null ? vanillaVoteStart : 0, raid.votesLocked(now), need, false);
         if (why == null && !trusted(uuid, config) && needsTrustedStarter(command, args, player, now, config)) why = "needs a trusted player to start";
         if (why == null) {
             holdKickVote(command, args, player, now);
@@ -684,16 +688,39 @@ public class BlockPlugin extends Plugin {
         }
     }
 
-    /** {@code trustedOnly}: raid mode. {@code needMinutes}: the active minutes this vote takes. */
-    private String voteRefusal(Player player, long voteStarted, boolean trustedOnly, int needMinutes) {
+    /**
+     * Why this player may not vote in an Essentials vote, or null when they may - the vote gate's own rule, for
+     * Essentials (Electorate.kt finds this method by name), so a player refused here neither votes nor counts
+     * toward what any of its votes need, /rtv included. Without it, a raid locked votes to trusted players while
+     * its bots still sat in every threshold, and no vote could pass - a kick of the raiders neither.
+     * {@code starts}: a kick this player starts ({@code voteStartMinutes}), else a cast ({@code voteCastMinutes}).
+     * {@code untrusted}: a session Essentials holds back (a privileged uuid on a device it is not bound to): it
+     * may be someone presenting another player's uuid, so it gets no trust, whitelist or admin exemption.
+     * Not when the player joined: Essentials' votes keep their own electorate. Game thread only; null before init.
+     */
+    public static String voteRefusal(String uuid, boolean starts, boolean untrusted) {
+        BlockPlugin plugin = instance;
+        if (plugin == null || uuid == null) return null;
+        Player player = Groups.player.find(p -> uuid.equals(p.uuid()));
+        if (player == null) return "not online";
+        ConfigManager.ConfigData config = ConfigManager.settings();
+        return plugin.voteRefusal(player, 0, plugin.raid.votesLocked(Time.millis()),
+                starts ? config.voteStartMinutes : config.voteCastMinutes, untrusted);
+    }
+
+    /**
+     * {@code trustedOnly}: raid mode. {@code needMinutes}: the active minutes this vote takes. {@code untrusted}: lend
+     * the uuid no trust or exemption (see {@link #voteRefusal(String, boolean, boolean)}).
+     */
+    private String voteRefusal(Player player, long voteStarted, boolean trustedOnly, int needMinutes, boolean untrusted) {
         ConfigManager.ConfigData config = ConfigManager.settings();
         String uuid = player.uuid();
         long now = Time.millis();
         // A whitelisted uuid is trusted on the operator's word, for votes as an admin is
-        boolean exempt = player.admin || ConfigManager.isUuidWhitelisted(uuid);
+        boolean exempt = !untrusted && (player.admin || ConfigManager.isUuidWhitelisted(uuid));
         Session session = sessions.get(uuid);
         return Suspicion.voteRefusal(exempt, challenge.isPending(uuid), session != null && session.snapshot, trustedOnly,
-                trusted(uuid, config), trust.minutes(uuid), needMinutes, score(uuid, exempt, now, new StringBuilder()),
+                !untrusted && trusted(uuid, config), trust.minutes(uuid), needMinutes, score(uuid, exempt, now, new StringBuilder()),
                 player.con == null ? 0 : player.con.connectTime, voteStarted, config);
     }
 
@@ -749,7 +776,7 @@ public class BlockPlugin extends Plugin {
         }
         if (isVoteWord(text)) {
             observeVotes();
-            if (essentialsVote != null && voteRefusal(player, essentialsVoteStart, raid.votesLocked(now), config.voteCastMinutes) != null) {
+            if (essentialsVote != null && voteRefusal(player, essentialsVoteStart, raid.votesLocked(now), config.voteCastMinutes, false) != null) {
                 votesRefused++;
                 player.sendMessage(Texts.local(config.voteRefusedText, player.locale));
                 return null;
@@ -1073,8 +1100,8 @@ public class BlockPlugin extends Plugin {
                     trust.isFlagged(uuid) ? ", flagged" : "",
                     trusted(uuid, config) ? "trusted" : lowTrust(uuid, config) ? "low trust" : "known");
             Log.info("BlockIp: suspicion @ (@)@", score, why, player == null ? "" : ", vote: "
-                    + (voteRefusal(player, 0, raid.votesLocked(now), config.voteCastMinutes) == null ? "allowed"
-                    : "refused, " + voteRefusal(player, 0, raid.votesLocked(now), config.voteCastMinutes)));
+                    + (voteRefusal(player, 0, raid.votesLocked(now), config.voteCastMinutes, false) == null ? "allowed"
+                    : "refused, " + voteRefusal(player, 0, raid.votesLocked(now), config.voteCastMinutes, false)));
         });
 
         handler.register("blockipunflag", "<uuid>", "Lift the flag a failed challenge put on a uuid", args -> {
