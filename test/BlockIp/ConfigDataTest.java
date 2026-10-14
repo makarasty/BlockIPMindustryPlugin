@@ -52,6 +52,7 @@ class ConfigDataTest {
         assertEquals(0.4, data.trustedTargetShare);
         assertEquals(120, data.trustedMinutes);
         assertEquals(6, data.raidJoins);
+        assertEquals(12, data.raidNewJoins);
         assertTrue(data.voteCommands.contains("votekick") && data.voteCommands.contains("evote"));
     }
 

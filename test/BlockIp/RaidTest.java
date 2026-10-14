@@ -23,6 +23,18 @@ class RaidTest {
     }
 
     @Test
+    void aBurstOfNewUuidsStartsItWithoutLookingScripted() {
+        Raid raid = new Raid();
+        for (int i = 0; i < 11; i++) assertFalse(raid.newJoin("5.5.5." + i, i * 1_000L, 12, WINDOW, HOLD));
+        assertFalse(raid.newJoin("5.5.5.0", 11_000, 12, WINDOW, HOLD), "one address twice is one join");
+        assertTrue(raid.newJoin("5.5.5.11", 12_000, 12, WINDOW, HOLD));
+        assertEquals("new uuid burst", raid.reason());
+        Raid slow = new Raid();
+        for (int i = 0; i < 30; i++) assertFalse(slow.newJoin("6.6.6." + i, i * 3_000L, 12, WINDOW, HOLD), "one every 3 s");
+        assertFalse(new Raid().newJoin("x", 0, 0, WINDOW, HOLD), "0 turns it off");
+    }
+
+    @Test
     void oneAddressOrSlowJoinsAreNoBurst() {
         Raid raid = new Raid();
         for (int i = 0; i < 30; i++) assertFalse(raid.join("3.3.3.3", 7, "004m", i * 100L, 6, WINDOW, HOLD));

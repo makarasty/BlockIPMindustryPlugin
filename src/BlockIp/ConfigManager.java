@@ -126,6 +126,11 @@ public class ConfigManager {
          */
         public int raidJoins = 6;
         public int raidJoinSeconds = 30;
+        /**
+         * Joins of uuids this server has no record of, from this many addresses within raidJoinSeconds, start raid
+         * mode with no check that they look scripted (0 turns this off). Reconnects after a restart never count.
+         */
+        public int raidNewJoins = 12;
         public int raidHoldMinutes = 10;
         public int raidChallengeSeconds = 90;
         public String raidMoveText = "[scarlet]Anti-bot check:[] walk a few steps with your unit, and a button will appear. Press the one it asks for.";

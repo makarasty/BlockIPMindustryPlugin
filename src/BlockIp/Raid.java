@@ -27,6 +27,8 @@ final class Raid {
 
     /** Recent joins not yet trusted, oldest first, one per address, never more than the burst threshold. */
     private final ArrayDeque<Join> joins = new ArrayDeque<>();
+    /** The same, of uuids this server has no record of at all (see {@link #newJoin}). */
+    private final ArrayDeque<Join> newJoins = new ArrayDeque<>();
     private long until, started;
     private String reason;
 
@@ -36,16 +38,32 @@ final class Raid {
      * during raid mode extends it. A burst counts only when it looks scripted (see {@link #scripted}).
      */
     boolean join(String address, int fingerprint, String name, long now, int burst, long windowMs, long holdMs) {
-        if (burst <= 0) return false;
-        while (!joins.isEmpty() && now - joins.peekFirst().time > windowMs) joins.pollFirst();
-        for (Iterator<Join> it = joins.iterator(); it.hasNext(); ) {
-            if (it.next().address.equals(address)) it.remove();
-        }
-        joins.addLast(new Join(address, fingerprint, name, now));
-        while (joins.size() > burst) joins.pollFirst();
-        if (joins.size() < burst || !scripted()) return false;
+        if (!add(joins, new Join(address, fingerprint, name, now), burst, windowMs) || !scripted()) return false;
         joins.clear();
         return trigger("join burst", now, holdMs);
+    }
+
+    /**
+     * A join of a uuid with no trust record here, never seen active. {@code burst} of them from distinct addresses
+     * within the window start raid mode however varied their clients and names - a script that varies both still
+     * needs fresh uuids - at a threshold above {@link #join}'s, since that test is not put to them.
+     */
+    boolean newJoin(String address, long now, int burst, long windowMs, long holdMs) {
+        if (!add(newJoins, new Join(address, 0, "", now), burst, windowMs)) return false;
+        newJoins.clear();
+        return trigger("new uuid burst", now, holdMs);
+    }
+
+    /** Adds {@code join} to {@code recent}, one per address within the window; true once it holds {@code burst}. */
+    private static boolean add(ArrayDeque<Join> recent, Join join, int burst, long windowMs) {
+        if (burst <= 0) return false;
+        while (!recent.isEmpty() && join.time - recent.peekFirst().time > windowMs) recent.pollFirst();
+        for (Iterator<Join> it = recent.iterator(); it.hasNext(); ) {
+            if (it.next().address.equals(join.address)) it.remove();
+        }
+        recent.addLast(join);
+        while (recent.size() > burst) recent.pollFirst();
+        return recent.size() >= burst;
     }
 
     /**

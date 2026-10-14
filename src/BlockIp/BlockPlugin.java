@@ -83,7 +83,8 @@ public class BlockPlugin extends Plugin {
     private int heldVotes;
     private final CommandGuard.Gate challengeGate = this::challengeAllows, voteGate = this::voteAllows;
 
-    private record Arrival(int fingerprint, boolean burst) {
+    /** {@code fresh}: a burst join of a uuid with no trust record. */
+    private record Arrival(int fingerprint, boolean burst, boolean fresh) {
     }
 
     private record Admitted(NetConnection connection, int fingerprint, boolean lowTrust, boolean untrusted, boolean vpnChallenge) {
@@ -254,7 +255,9 @@ public class BlockPlugin extends Plugin {
         if (a == null || a.connection != player.con) return;
         String uuid = player.uuid();
         long now = Time.millis();
-        arrivals.put(uuid, new Arrival(a.fingerprint, Suspicion.burstJoin(a.untrusted, trust.get(uuid), started, now, ConfigManager.settings())));
+        TrustStore.Record record = trust.get(uuid);
+        boolean burst = Suspicion.burstJoin(a.untrusted, record, started, now, ConfigManager.settings());
+        arrivals.put(uuid, new Arrival(a.fingerprint, burst, burst && record == null));
         // During a raid every low-trust join is checked, VPN or not; a uuid that failed one before, always
         boolean raidCheck = a.lowTrust && (raid.active(now) && !passedThisRaid.contains(uuid) || trust.isFlagged(uuid));
         if (!a.vpnChallenge && !raidCheck) return;
@@ -274,13 +277,13 @@ public class BlockPlugin extends Plugin {
      * A join toward a burst (see {@link Suspicion#burstJoin}). At join, not at connect: a fresh uuid passes
      * vanilla's checks too, so six connect packets closed at once, every few minutes, held raid mode on for good.
      */
-    private void countJoin(String address, int fingerprint, String name, long now) {
+    private void countJoin(String address, int fingerprint, String name, boolean fresh, long now) {
         ConfigManager.ConfigData config = ConfigManager.settings();
         // A hold that ran out but whose end the minute tick has not announced yet would be extended, with no sweep
         if (raid.ended(now)) onRaidEnd();
-        if (raid.join(address, fingerprint, name, now, config.raidJoins, config.raidJoinSeconds * 1000L, holdMs(config))) {
-            onRaidStart("join burst");
-        }
+        long window = config.raidJoinSeconds * 1000L;
+        if (raid.join(address, fingerprint, name, now, config.raidJoins, window, holdMs(config))) onRaidStart("join burst");
+        if (fresh && raid.newJoin(address, now, config.raidNewJoins, window, holdMs(config))) onRaidStart("new uuid burst");
     }
 
     /** What a script sends the same every time and players differ in: locale, client, mods, colour, device. */
@@ -401,7 +404,7 @@ public class BlockPlugin extends Plugin {
             challengeInGame(player);
         }
         // Last, so a burst this completes sweeps this player too, unless asked already
-        if (arrival != null && arrival.burst) countJoin(player.ip(), arrival.fingerprint, player.name, Time.millis());
+        if (arrival != null && arrival.burst) countJoin(player.ip(), arrival.fingerprint, player.name, arrival.fresh, Time.millis());
     }
 
     /**
@@ -856,7 +859,7 @@ public class BlockPlugin extends Plugin {
         ConfigManager.ConfigData config = ConfigManager.settings();
         passedThisRaid.clear();
         long now = Time.millis();
-        boolean burst = "join burst".equals(reason);
+        boolean burst = "join burst".equals(reason) || "new uuid burst".equals(reason);
         int[] asked = {0};
         Groups.player.each(player -> {
             String uuid = player.uuid();
