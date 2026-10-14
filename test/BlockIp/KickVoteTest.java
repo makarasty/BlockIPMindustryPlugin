@@ -66,7 +66,16 @@ class KickVoteTest {
         assertFalse(BlockPlugin.startsUnheldVote("votekick", true), "held instead");
         assertTrue(BlockPlugin.startsUnheldVote("votekick", false));
         assertFalse(BlockPlugin.startsUnheldVote("vote", false));
-        assertFalse(BlockPlugin.startsUnheldVote("rtv", false));
+        assertTrue(BlockPlugin.startsUnheldVote("rtv", true), "Essentials ends the map at its share of /rtv");
+    }
+
+    @Test
+    void anOpenRtvTakesMoreVotesWithoutATrustedPlayer() {
+        long start = 1_000_000L;
+        assertFalse(BlockPlugin.rtvOpen(0, start), "none opened");
+        assertTrue(BlockPlugin.rtvOpen(start, start));
+        assertTrue(BlockPlugin.rtvOpen(start, start + Tuning.Votes.RTV_OPEN_MS - 1));
+        assertFalse(BlockPlugin.rtvOpen(start, start + Tuning.Votes.RTV_OPEN_MS), "timed out: the next opens a new one");
     }
 
     @Test
