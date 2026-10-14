@@ -32,8 +32,9 @@ final class Session {
     boolean snapshot;
     /** The farthest the unit got this minute and this challenge from where they began; moved sums the minutes. */
     float moved, minuteMoved, challengeMoved;
-    /** This minute: something built, broken or configured, and a fresh snapshot from the client. */
-    boolean minuteAction, minuteSnapshot;
+    /** This minute: world actions (built, broken, configured...), and whether a fresh snapshot came from the client. */
+    int minuteActions;
+    boolean minuteSnapshot;
     /** Times this player was one of several sending the same vote command or chat line at once. */
     int coordinated;
     boolean passedChallenge;
@@ -109,9 +110,13 @@ final class Session {
         return now - lastActive > AFK_MS && !activeMinute();
     }
 
-    /** Walked, or acted and moved a little while its client sent snapshots this minute. */
+    /**
+     * Walked; or acted while its client sent snapshots this minute, and either moved a little or acted a lot -
+     * a builder stands still and builds at range, a script sending one action a minute does not.
+     */
     private boolean activeMinute() {
-        return minuteMoved >= ACTIVE_DISTANCE || minuteAction && minuteSnapshot && minuteMoved >= ACTION_DISTANCE;
+        return minuteMoved >= ACTIVE_DISTANCE || minuteSnapshot && minuteActions > 0
+                && (minuteMoved >= ACTION_DISTANCE || minuteActions >= Tuning.Movement.BUILDER_ACTIONS);
     }
 
     /**
@@ -121,7 +126,8 @@ final class Session {
     boolean takeMinute(long now) {
         boolean active = activeMinute();
         if (active) lastActive = now;
-        minuteAction = minuteSnapshot = false;
+        minuteActions = 0;
+        minuteSnapshot = false;
         minuteMoved = 0;
         minuteX = x;
         minuteY = y;

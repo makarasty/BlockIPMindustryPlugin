@@ -156,7 +156,7 @@ public class BlockPlugin extends Plugin {
             if (challenge.isPending(action.player.uuid())) return false;
             if (action.tile != null && WORLD_ACTIONS.contains(action.type)) {
                 Session session = sessions.get(action.player.uuid());
-                if (session != null) session.minuteAction = true;
+                if (session != null) session.minuteActions++;
             }
             return true;
         });

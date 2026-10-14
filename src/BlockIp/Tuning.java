@@ -123,6 +123,8 @@ final class Tuning {
         static final float CHALLENGE_DISTANCE = 24f;
         /** Distance (world units) a minute with a build, break or config also needs to count as active: one tile. */
         static final float ACTION_DISTANCE = 8f;
+        /** World actions in a minute (with a fresh snapshot) that make it active however little the unit moved: a builder at range. */
+        static final int BUILDER_ACTIONS = 20;
         /** Head room over the unit's top speed before a step reads as a teleport (factor). */
         static final float SPEED_SLACK = 1.5f;
         /** Flat head room (world units) added to the largest step a unit could make between two samples. */

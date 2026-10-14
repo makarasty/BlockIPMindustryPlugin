@@ -64,19 +64,33 @@ class SessionTest {
     void anActionMakesTheMinuteActiveOnlyFromAClientThatSendsSnapshots() {
         // A bot that cannot walk, sending one free action a minute and no snapshot
         Session s = session();
-        s.minuteAction = true;
+        s.minuteActions = 1;
         assertFalse(s.takeMinute(0));
 
         s.sample(7, 100, 100, SPEED, 2_000, 2_000);
-        s.minuteAction = true;
+        s.minuteActions = 1;
         assertFalse(s.takeMinute(0), "a snapshot and an action, standing still");
 
         s.sample(7, 100, 100, SPEED, 3_000, 4_000);
         s.sample(7, 108, 100, SPEED, 4_000, 6_000);
-        s.minuteAction = true;
+        s.minuteActions = 1;
         assertTrue(s.takeMinute(0), "a tile of movement with it");
-        s.minuteAction = true;
+        s.minuteActions = 1;
         assertFalse(s.takeMinute(0), "the snapshot has to be this minute's");
+    }
+
+    @Test
+    void aBuilderStandingStillCountsButOneActionAndJitterDoesNot() {
+        Session s = session();
+        for (int i = 1; i <= 30; i++) s.sample(7, i % 2 == 0 ? 6 : 0, 0, SPEED, i * 2_000L, i * 2_000L);
+        s.minuteActions = 1;
+        assertFalse(s.takeMinute(60_000), "one action and 6 units of jitter");
+
+        for (int i = 31; i <= 60; i++) s.sample(7, 6, 0, SPEED, i * 2_000L, i * 2_000L);
+        s.minuteActions = Tuning.Movement.BUILDER_ACTIONS;
+        assertTrue(s.takeMinute(120_000), "building at range without moving");
+        s.minuteActions = Tuning.Movement.BUILDER_ACTIONS;
+        assertFalse(s.takeMinute(180_000), "no snapshot this minute");
     }
 
     @Test
