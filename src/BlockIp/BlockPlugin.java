@@ -558,12 +558,22 @@ public class BlockPlugin extends Plugin {
      * counts yes votes itself (a kick, a rollback, a game over, a map), and vanilla's kick without
      * {@link KickVote#available}. Five bots farmed past the vote minutes are Essentials' majority on a server of
      * eight, so a trusted starter is what keeps them from rolling the map back. While trust is new nobody is
-     * trusted, so then only a kick naming a trusted player is held to it. A player alone may still change the map.
+     * trusted, so then only a kick naming a trusted player is held to it. A player alone may still change the map
+     * or skip waves ({@link #harmlessAlone}), but not roll the map back or end the game.
      */
     private boolean needsTrustedStarter(String command, String[] args, Player caller, long now, ConfigManager.ConfigData config) {
-        boolean kick = startsKick(command, args);
-        if (!startsUnheldVote(command, KickVote.available()) || Groups.player.size() <= 1 && !kick) return false;
-        return !newTrust(now, config) || kick && kicksTrusted(command, args, caller);
+        if (!startsUnheldVote(command, KickVote.available()) || Groups.player.size() <= 1 && harmlessAlone(command, args)) return false;
+        return !newTrust(now, config) || startsKick(command, args) && kicksTrusted(command, args, caller);
+    }
+
+    /**
+     * A vote a player alone may start without being trusted: one that moves to another map or skips waves.
+     * Not a rollback, a game over, a draw or Essentials' random outcome, which can undo the work of players who
+     * just left, and not a kick. Essentials matches its subcommand exactly, so this does too.
+     */
+    static boolean harmlessAlone(String command, String[] args) {
+        return "votemap".equals(command) || "rtv".equals(command)
+                || "evote".equals(command) && args.length > 0 && ("map".equals(args[0]) || "skip".equals(args[0]));
     }
 
     /** A vote start whose count BlockPlugin cannot hold back: Essentials' every one, and vanilla's kick unless {@code held}. */

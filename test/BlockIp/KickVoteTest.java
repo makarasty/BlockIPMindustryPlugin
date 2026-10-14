@@ -70,6 +70,20 @@ class KickVoteTest {
     }
 
     @Test
+    void aPlayerAloneMayOnlyChangeTheMapOrSkipWaves() {
+        assertTrue(BlockPlugin.harmlessAlone("votemap", new String[]{"3"}));
+        assertTrue(BlockPlugin.harmlessAlone("rtv", new String[0]));
+        assertTrue(BlockPlugin.harmlessAlone("evote", new String[]{"map", "3", "r"}));
+        assertTrue(BlockPlugin.harmlessAlone("evote", new String[]{"skip", "5"}));
+        for (String kind : new String[]{"back", "gg", "draw", "random", "kick", "MAP"}) {
+            assertFalse(BlockPlugin.harmlessAlone("evote", new String[]{kind, "x"}), kind);
+        }
+        assertFalse(BlockPlugin.harmlessAlone("evote", new String[0]));
+        assertFalse(BlockPlugin.harmlessAlone("evotekick", new String[]{"x"}));
+        assertFalse(BlockPlugin.harmlessAlone("votekick", new String[]{"x", "r"}));
+    }
+
+    @Test
     void essentialsKickVotesStartAKickToo() {
         assertTrue(BlockPlugin.startsKick("votekick", new String[]{"x", "r"}));
         assertTrue(BlockPlugin.startsKick("evotekick", new String[]{"x"}));
