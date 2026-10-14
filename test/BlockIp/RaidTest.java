@@ -29,6 +29,9 @@ class RaidTest {
         assertFalse(raid.newJoin("5.5.5.0", 11_000, 12, WINDOW, HOLD), "one address twice is one join");
         assertTrue(raid.newJoin("5.5.5.11", 12_000, 12, WINDOW, HOLD));
         assertEquals("new uuid burst", raid.reason());
+        assertFalse(raid.votesLocked(12_000), "newcomers are challenged, regulars keep voting");
+        for (int i = 0; i < 6; i++) raid.join("7.7.7." + i, 7, "004m", 13_000 + i, 6, WINDOW, HOLD);
+        assertTrue(raid.votesLocked(14_000), "a scripted join burst still locks them");
         Raid slow = new Raid();
         for (int i = 0; i < 30; i++) assertFalse(slow.newJoin("6.6.6." + i, i * 3_000L, 12, WINDOW, HOLD), "one every 3 s");
         assertFalse(new Raid().newJoin("x", 0, 0, WINDOW, HOLD), "0 turns it off");

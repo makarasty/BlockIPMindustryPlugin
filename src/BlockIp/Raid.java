@@ -7,8 +7,9 @@ import java.util.Iterator;
  * Raid mode: on while a raid is going on, for everyone, not only VPN addresses - the bots that beat
  * the vote came through residential proxies no list knows. It starts on a burst of joins not yet trusted
  * from distinct addresses, on a coordinated vote, on a chat flood, or by hand, and holds for a while
- * after the last trigger. While on, low-trust joins are challenged; once joins (or an admin) started or extended
- * it, only trusted players vote too. A chorus alone does not lock votes: regulars not yet trusted keep voting.
+ * after the last trigger. While on, low-trust joins are challenged; once a scripted-looking join burst (or an admin)
+ * started or extended it, only trusted players vote too. A chorus or a burst of new uuids does not lock votes:
+ * regulars not yet trusted keep voting.
  * Holds only the state; BlockPlugin acts on it. Main thread only.
  */
 final class Raid {
@@ -49,12 +50,13 @@ final class Raid {
     /**
      * A join of a uuid with no trust record here, never seen active. {@code burst} of them from distinct addresses
      * within the window start raid mode however varied their clients and names - a script that varies both still
-     * needs fresh uuids - at a threshold above {@link #join}'s, since that test is not put to them.
+     * needs fresh uuids - at a threshold above {@link #join}'s, since that test is not put to them. Like a chorus
+     * it does not lock votes: a dozen real newcomers from a Discord post look the same, and newcomers cannot vote yet.
      */
     boolean newJoin(String address, long now, int burst, long windowMs, long holdMs) {
         if (!add(newJoins, new Join(address, 0, "", now), burst, windowMs)) return false;
         newJoins.clear();
-        return trigger("new uuid burst", now, holdMs);
+        return trigger("new uuid burst", now, holdMs, false);
     }
 
     /** Adds {@code join} to {@code recent}, one per address within the window; true once it holds {@code burst}. */
