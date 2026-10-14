@@ -824,8 +824,8 @@ public class BlockPlugin extends Plugin {
                     && !Suspicion.inCohort(session, sessions.values(), config)) return;
             if (challengeInGame(player)) asked[0]++;
         });
-        Log.warn("BlockIp: raid mode on (@) for @ min: low-trust joins are challenged and only trusted players vote; challenged @ in game",
-                reason, config.raidHoldMinutes, asked[0]);
+        Log.warn("BlockIp: raid mode on (@) @: low-trust joins are challenged and only trusted players vote; challenged @ in game",
+                reason, "manual".equals(reason) ? "until blockipraid off" : "for " + config.raidHoldMinutes + " min", asked[0]);
         // For ServerAdminer, which alerts Discord, with no compile dependency either way
         Events.fire("BlockIp:raid:start:" + reason);
     }
@@ -1019,6 +1019,9 @@ public class BlockPlugin extends Plugin {
 
         handler.register("blockipinfo", "<name|uuid>", "Show a player's trust and suspicion score", args -> {
             Player player = Groups.player.find(p -> p.uuid().equals(args[0]) || Strings.stripColors(p.name).equalsIgnoreCase(args[0]));
+            // Some clients put an icon glyph before the name, so a name typed in the console is also looked for inside it
+            String part = args[0].toLowerCase(Locale.ROOT);
+            if (player == null) player = Groups.player.find(p -> Strings.stripColors(p.name).toLowerCase(Locale.ROOT).contains(part));
             String uuid = player != null ? player.uuid() : args[0];
             TrustStore.Record record = trust.get(uuid);
             if (player == null && record == null && !trust.isFlagged(uuid)) {
