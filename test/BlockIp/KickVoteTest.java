@@ -4,6 +4,8 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class KickVoteTest {
@@ -74,12 +76,54 @@ class KickVoteTest {
         assertTrue(BlockPlugin.harmlessAlone("votemap", new String[]{"3"}));
         assertTrue(BlockPlugin.harmlessAlone("evote", new String[]{"map", "3", "r"}));
         assertTrue(BlockPlugin.harmlessAlone("evote", new String[]{"skip", "5"}));
+        assertTrue(BlockPlugin.harmlessAlone("rtv", new String[0]));
         for (String kind : new String[]{"back", "gg", "draw", "random", "kick", "MAP"}) {
             assertFalse(BlockPlugin.harmlessAlone("evote", new String[]{kind, "x"}), kind);
         }
         assertFalse(BlockPlugin.harmlessAlone("evote", new String[0]));
         assertFalse(BlockPlugin.harmlessAlone("evotekick", new String[]{"x"}));
         assertFalse(BlockPlugin.harmlessAlone("votekick", new String[]{"x", "r"}));
+    }
+
+    @Test
+    void aPlayerAloneChangesTheMapWithoutActiveMinutes() {
+        ConfigManager.ConfigData c = new ConfigManager.ConfigData();
+        assertEquals(0, BlockPlugin.voteMinutes(false, true, c), "/votemap, /rtv alone");
+        assertEquals(c.voteCastMinutes, BlockPlugin.voteMinutes(false, false, c));
+        assertEquals(c.voteStartMinutes, BlockPlugin.voteMinutes(true, true, c), "a kick never");
+        // A newcomer in their first minute: alone, only the minutes stood in the way; the rest still refuses
+        int score = Tuning.Suspicion.NO_ACTIVE_TIME_POINTS;
+        assertNull(Suspicion.voteRefusal(false, false, true, false, false, 0, 0, score, 0, 0, c));
+        assertEquals("challenge pending", Suspicion.voteRefusal(false, true, true, false, false, 0, 0, score, 0, 0, c));
+        assertNotNull(Suspicion.voteRefusal(false, false, false, false, false, 0, 0, score, 0, 0, c), "a headless bot");
+        assertNotNull(Suspicion.voteRefusal(false, false, true, true, false, 0, 0, score, 0, 0, c), "raid mode");
+    }
+
+    /** A fresh uuid alone on an empty server must not reload the map with every command: one free pass a while. */
+    @Test
+    void theSoloFreePassComesOncePerWindowAndHoldsOnlyForItsOwnRtv() {
+        BlockPlugin plugin = new BlockPlugin();
+        long t = 1_000_000_000L;
+        assertTrue(plugin.soloPassOpen(t));
+        plugin.offerSoloPass("uuid-a", t);
+        assertTrue(plugin.soloPassOpen(t + 1_000), "a refused /rtv 99 spends nothing");
+        // /rtv: the game ends inside the command, the next map loads 12 s later
+        plugin.soloMapChanged(t + 5);
+        plugin.soloMapChanged(t + 12_000);
+
+        assertFalse(plugin.soloPassOpen(t + 1_000), "a second change right after");
+        assertTrue(plugin.holdsSoloPass("uuid-a", t + 1_000), "Essentials' check of the same /rtv");
+        assertFalse(plugin.holdsSoloPass("uuid-b", t + 1_000));
+        assertFalse(plugin.holdsSoloPass("uuid-a", t + Tuning.Votes.SOLO_HOOK_MS), "a later /rtv");
+        assertTrue(plugin.soloPassOpen(t + Tuning.Votes.SOLO_FREE_MS));
+
+        // Refused by Essentials: the offer is withdrawn after the command, so a core dying a second later spends nothing
+        long u = t + Tuning.Votes.SOLO_FREE_MS;
+        plugin.offerSoloPass("uuid-c", u);
+        plugin.withdrawSoloOffer();
+        plugin.soloMapChanged(u + 1_000);
+        assertTrue(plugin.soloPassOpen(u + 2_000));
+        assertFalse(plugin.holdsSoloPass("uuid-c", u + 10));
     }
 
     @Test

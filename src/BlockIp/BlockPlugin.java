@@ -14,6 +14,7 @@ import arc.util.Time;
 import arc.util.Timer;
 import mindustry.Vars;
 import mindustry.game.EventType.ConnectPacketEvent;
+import mindustry.game.EventType.GameOverEvent;
 import mindustry.game.EventType.PlayerChatEvent;
 import mindustry.game.EventType.PlayerConnect;
 import mindustry.game.EventType.PlayerJoin;
@@ -80,6 +81,12 @@ public class BlockPlugin extends Plugin {
     private Object heldVote;
     private int heldVotes;
     private final CommandGuard.Gate challengeGate = this::challengeAllows, voteGate = this::voteAllows;
+    // The free pass a lone player was last offered (who, when), and when one last loaded a map (see Tuning.Votes.SOLO_FREE_MS)
+    private String soloOfferUuid;
+    private long soloOfferAt = -Tuning.Votes.SOLO_FREE_MS, soloFreeAt = -Tuning.Votes.SOLO_FREE_MS;
+    // What guardCommands last saw, so a command line guards again only when something changed
+    private int guardedSize = -1;
+    private Object guardedLast, guardedConfig;
 
     /** {@code fresh}: a burst join of a uuid with no trust record. */
     private record Arrival(int fingerprint, boolean burst, boolean fresh) {
@@ -135,11 +142,17 @@ public class BlockPlugin extends Plugin {
         // command runs, so a command registered since is guarded before anyone can use it - a '.' one too,
         // which Essentials' keyboard-layout fix runs as a command.
         Events.on(PlayerChatEvent.class, event -> {
-            if (event.message != null && (event.message.startsWith("/") || event.message.startsWith("."))) guardCommands();
+            if (event.message != null && (event.message.startsWith("/") || event.message.startsWith("."))
+                    && commandsChanged(Vars.netServer.clientCommands.getCommandList(), ConfigManager.settings())) guardCommands();
         });
         // Essentials' protect module sets its own filter, without chaining, on every map load. A frame later,
         // after every handler of this event has run, take the slot back with theirs chained behind ours.
-        Events.on(WorldLoadEndEvent.class, event -> arc.Core.app.post(this::keepFilter));
+        Events.on(WorldLoadEndEvent.class, event -> {
+            soloMapChanged(Time.millis());
+            arc.Core.app.post(this::keepFilter);
+        });
+        // /rtv ends the game inside the command and the server loads the next map roundExtraTime later
+        Events.on(GameOverEvent.class, event -> soloMapChanged(Time.millis()));
         Timer.schedule(this::minuteTick, Tuning.Timers.MINUTE_TICK_SECONDS, Tuning.Timers.MINUTE_TICK_SECONDS);
         Timer.schedule(this::sample, Tuning.Timers.SAMPLE_SECONDS, Tuning.Timers.SAMPLE_SECONDS);
 
@@ -506,6 +519,24 @@ public class BlockPlugin extends Plugin {
         CommandHandler handler = Vars.netServer.clientCommands;
         CommandGuard.guard(handler, name -> true, challengeGate);
         CommandGuard.guard(handler, name -> ConfigManager.settings().voteCommands.contains(name), voteGate);
+        sawCommands(handler.getCommandList(), ConfigManager.settings());
+    }
+
+    void sawCommands(Seq<CommandHandler.Command> list, ConfigManager.ConfigData config) {
+        guardedSize = list.size;
+        guardedLast = list.isEmpty() ? null : list.peek();
+        guardedConfig = config;
+    }
+
+    /**
+     * Whether a command may have been registered, or the vote list reloaded, since the last guardCommands:
+     * every command line of a raid walked all hundred commands otherwise. Arc's register drops a same-name
+     * command and appends the new one, so any register moves the last element, and a reload replaces the
+     * config object. A runner swapped in place without a register waits for the minute tick.
+     */
+    boolean commandsChanged(Seq<CommandHandler.Command> list, ConfigManager.ConfigData config) {
+        return list.size != guardedSize || (list.isEmpty() ? null : list.peek()) != guardedLast
+                || config != guardedConfig;
     }
 
     private boolean challengeAllows(String command, String[] args, Object caller) {
@@ -537,7 +568,10 @@ public class BlockPlugin extends Plugin {
         }
         String uuid = player.uuid();
         boolean startsKick = startsKick(command, args);
-        int need = startsKick ? config.voteStartMinutes : config.voteCastMinutes;
+        // Only for a player short of the minutes: a regular alone needs no pass and must not spend the next newcomer's
+        boolean soloFree = Groups.player.size() <= 1 && harmlessAlone(command, args) && trust.minutes(uuid) < config.voteCastMinutes
+                && soloPassOpen(now);
+        int need = voteMinutes(startsKick, soloFree, config);
         // By command alone: varying the target or the y/n would otherwise split one attack into several
         if (config.coordinatedCommands > 0 && !trusted(uuid, config) && chorusVoice(uuid, now, config, refusedAsRaider(uuid, now, config))) {
             long window = config.coordinatedSeconds * 1000L;
@@ -553,6 +587,11 @@ public class BlockPlugin extends Plugin {
         String why = voteRefusal(player, "vote".equals(command) && vanillaVote != null ? vanillaVoteStart : 0, raid.votesLocked(now), need, false);
         if (why == null && !trusted(uuid, config) && needsTrustedStarter(command, args, player, now, config)) why = "needs a trusted player to start";
         if (why == null) {
+            if (soloFree) {
+                offerSoloPass(uuid, now);
+                // Every map change it allows happens inside the command; one Essentials refused leaves nothing to spend
+                Core.app.post(this::withdrawSoloOffer);
+            }
             holdKickVote(command, args, player, now);
             // A vote this starts is seen right after it runs, so its start time is exact
             Core.app.post(this::observeVotes);
@@ -582,7 +621,18 @@ public class BlockPlugin extends Plugin {
      * just left, and not a kick. Essentials matches its subcommand exactly, so this does too.
      */
     static boolean harmlessAlone(String command, String[] args) {
-        return "votemap".equals(command) || "evote".equals(command) && args.length > 0 && ("map".equals(args[0]) || "skip".equals(args[0]));
+        return "votemap".equals(command) || "rtv".equals(command)
+                || "evote".equals(command) && args.length > 0 && ("map".equals(args[0]) || "skip".equals(args[0]));
+    }
+
+    /**
+     * The active minutes a vote takes: starting a kick more than any other, and none for a vote that is
+     * {@code harmlessAlone} from a player alone on the server. Alone, the minutes only kept a newcomer from picking
+     * the next map with nobody else there to vote; a pending challenge, a headless client, raid mode and a high
+     * suspicion score still refuse them.
+     */
+    static int voteMinutes(boolean startsKick, boolean harmlessAlone, ConfigManager.ConfigData config) {
+        return startsKick ? config.voteStartMinutes : harmlessAlone ? 0 : config.voteCastMinutes;
     }
 
     /**
@@ -704,8 +754,40 @@ public class BlockPlugin extends Plugin {
         Player player = Groups.player.find(p -> uuid.equals(p.uuid()));
         if (player == null) return "not online";
         ConfigManager.ConfigData config = ConfigManager.settings();
-        return plugin.voteRefusal(player, 0, plugin.raid.votesLocked(Time.millis()),
-                starts ? config.voteStartMinutes : config.voteCastMinutes, untrusted);
+        // Alone, Essentials' only vote that is not a kick is /rtv, as its /vote refuses a server this small and the
+        // gate holds that /vote to the minutes anyway: so a lone player moves on to the next map as with /votemap,
+        // on the free pass the gate gave this same /rtv a moment ago and no other
+        long now = Time.millis();
+        return plugin.voteRefusal(player, 0, plugin.raid.votesLocked(now),
+                voteMinutes(starts, Groups.player.size() <= 1 && plugin.holdsSoloPass(uuid, now), config), untrusted);
+    }
+
+    /** Whether a lone player's map change may skip the active minutes now (see {@link Tuning.Votes#SOLO_FREE_MS}). */
+    boolean soloPassOpen(long now) {
+        return now - soloFreeAt >= Tuning.Votes.SOLO_FREE_MS;
+    }
+
+    void offerSoloPass(String uuid, long now) {
+        soloOfferUuid = uuid;
+        soloOfferAt = now;
+    }
+
+    void withdrawSoloOffer() {
+        soloOfferUuid = null;
+        soloOfferAt = -Tuning.Votes.SOLO_FREE_MS;
+    }
+
+    /**
+     * A map ended or loaded: an offered pass is spent only now, so a /rtv to a map that does not exist, or one Essentials
+     * refuses for its own reasons, costs the lone player nothing.
+     */
+    void soloMapChanged(long now) {
+        if (now - soloOfferAt < Tuning.Votes.SOLO_HOOK_MS) soloFreeAt = soloOfferAt;
+    }
+
+    /** Whether the gate offered {@code uuid} the solo free pass just now (see {@link Tuning.Votes#SOLO_HOOK_MS}). */
+    boolean holdsSoloPass(String uuid, long now) {
+        return uuid.equals(soloOfferUuid) && now - soloOfferAt < Tuning.Votes.SOLO_HOOK_MS;
     }
 
     /**

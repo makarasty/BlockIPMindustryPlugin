@@ -166,6 +166,13 @@ final class Tuning {
 
         /** Yes votes a kick of a trusted player needs, never under this many. */
         static final int MIN_YES_VOTES = 3;
+        /**
+         * A map change by a player alone skips the active minutes at most once per this long, server-wide: each
+         * one is a world load and a wipe of the map's history, and a fresh uuid could otherwise repeat it at will.
+         */
+        static final long SOLO_FREE_MS = 5 * 60_000L;
+        /** How long the free pass the gate gave holds for Essentials' own check of the same /rtv, in ms. */
+        static final long SOLO_HOOK_MS = 5_000L;
     }
 
     /** Chat line floods (see {@link Chorus}). */
