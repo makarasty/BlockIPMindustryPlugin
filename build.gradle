@@ -1,6 +1,18 @@
+plugins {
+    id 'com.diffplug.spotless' version '8.10.0'
+}
+
 apply plugin: "java"
 
 version = '1.0'
+
+spotless {
+    java {
+        target 'src/**/*.java', 'test/**/*.java'
+        // 1.37.0 fails under spotless 8.10.0 (NoSuchMethodError on JavaFormatterOptions$Style.valueOf)
+        googleJavaFormat('1.36.1').aosp()
+    }
+}
 
 sourceSets.main.java.srcDirs = ["src"]
 sourceSets.test.java.srcDirs = ["test"]
