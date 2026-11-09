@@ -1,11 +1,11 @@
 package BlockIp;
 
-import org.junit.jupiter.api.Test;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import org.junit.jupiter.api.Test;
 
 class VpnGuardTest {
     private static final long MINUTE = 60_000;
@@ -61,7 +61,9 @@ class VpnGuardTest {
 
         // Attempts during the hold are refused and do not extend it, however many there are
         for (int i = 0; i < 50; i++) {
-            assertEquals(VpnGuard.Reason.attack, guard.check(config, "3.3.4." + i, 20_000 + i * 11_000L, 1));
+            assertEquals(
+                    VpnGuard.Reason.attack,
+                    guard.check(config, "3.3.4." + i, 20_000 + i * 11_000L, 1));
         }
         assertFalse(guard.attackStarted());
         assertTrue(guard.underAttack(20_000 + 10 * MINUTE - 1));

@@ -5,12 +5,12 @@ import java.util.Iterator;
 
 /**
  * Raid mode: on while a raid is going on, for everyone, not only VPN addresses - the bots that beat
- * the vote came through residential proxies no list knows. It starts on a burst of joins not yet trusted
- * from distinct addresses, on a coordinated vote, on a chat flood, or by hand, and holds for a while
- * after the last trigger. While on, low-trust joins are challenged; once a scripted-looking join burst (or an admin)
- * started or extended it, only trusted players vote too. A chorus or a burst of new uuids does not lock votes:
- * regulars not yet trusted keep voting.
- * Holds only the state; BlockPlugin acts on it. Main thread only.
+ * the vote came through residential proxies no list knows. It starts on a burst of joins not yet
+ * trusted from distinct addresses, on a coordinated vote, on a chat flood, or by hand, and holds
+ * for a while after the last trigger. While on, low-trust joins are challenged; once a
+ * scripted-looking join burst (or an admin) started or extended it, only trusted players vote too.
+ * A chorus or a burst of new uuids does not lock votes: regulars not yet trusted keep voting. Holds
+ * only the state; BlockPlugin acts on it. Main thread only.
  */
 final class Raid {
     private static final class Join {
@@ -27,31 +27,47 @@ final class Raid {
         }
     }
 
-    /** Recent joins not yet trusted, oldest first, one per address, never more than the burst threshold. */
+    /**
+     * Recent joins not yet trusted, oldest first, one per address, never more than the burst
+     * threshold.
+     */
     private final ArrayDeque<Join> joins = new ArrayDeque<>();
+
     /** The same, of uuids this server has no record of at all (see {@link #newJoin}). */
     private final ArrayDeque<Join> newJoins = new ArrayDeque<>();
+
     private long until, started;
     private String reason;
+
     /** Only trusted players vote: set by every trigger but a chorus, until it ends. */
     private boolean votesLocked;
 
     /**
-     * A join not yet trusted from {@code address}, with its connect {@code fingerprint} and {@code name}. Returns
-     * true when it is the one that started raid mode. One address reconnecting over and over is one join; a burst
-     * during raid mode extends it. A burst counts only when it looks scripted (see {@link #scripted}).
+     * A join not yet trusted from {@code address}, with its connect {@code fingerprint} and {@code
+     * name}. Returns true when it is the one that started raid mode. One address reconnecting over
+     * and over is one join; a burst during raid mode extends it. A burst counts only when it looks
+     * scripted (see {@link #scripted}).
      */
-    boolean join(String address, int fingerprint, String name, long now, int burst, long windowMs, long holdMs) {
-        if (!add(joins, new Join(address, fingerprint, name, now), burst, windowMs) || !scripted()) return false;
+    boolean join(
+            String address,
+            int fingerprint,
+            String name,
+            long now,
+            int burst,
+            long windowMs,
+            long holdMs) {
+        if (!add(joins, new Join(address, fingerprint, name, now), burst, windowMs) || !scripted())
+            return false;
         joins.clear();
         return trigger("join burst", now, holdMs);
     }
 
     /**
-     * A join of a uuid with no trust record here, never seen active. {@code burst} of them from distinct addresses
-     * within the window start raid mode however varied their clients and names - a script that varies both still
-     * needs fresh uuids - at a threshold above {@link #join}'s, since that test is not put to them. Like a chorus
-     * it does not lock votes: a dozen real newcomers from a Discord post look the same, and newcomers cannot vote yet.
+     * A join of a uuid with no trust record here, never seen active. {@code burst} of them from
+     * distinct addresses within the window start raid mode however varied their clients and names -
+     * a script that varies both still needs fresh uuids - at a threshold above {@link #join}'s,
+     * since that test is not put to them. Like a chorus it does not lock votes: a dozen real
+     * newcomers from a Discord post look the same, and newcomers cannot vote yet.
      */
     boolean newJoin(String address, long now, int burst, long windowMs, long holdMs) {
         if (!add(newJoins, new Join(address, 0, "", now), burst, windowMs)) return false;
@@ -59,10 +75,14 @@ final class Raid {
         return trigger("new uuid burst", now, holdMs, false);
     }
 
-    /** Adds {@code join} to {@code recent}, one per address within the window; true once it holds {@code burst}. */
+    /**
+     * Adds {@code join} to {@code recent}, one per address within the window; true once it holds
+     * {@code burst}.
+     */
     private static boolean add(ArrayDeque<Join> recent, Join join, int burst, long windowMs) {
         if (burst <= 0) return false;
-        while (!recent.isEmpty() && join.time - recent.peekFirst().time > windowMs) recent.pollFirst();
+        while (!recent.isEmpty() && join.time - recent.peekFirst().time > windowMs)
+            recent.pollFirst();
         for (Iterator<Join> it = recent.iterator(); it.hasNext(); ) {
             if (it.next().address.equals(join.address)) it.remove();
         }
@@ -72,9 +92,10 @@ final class Raid {
     }
 
     /**
-     * At least half the burst shares one client fingerprint or has look-alike names. Regulars moving over from
-     * a crashed sibling server, which has its own trust file, have none here, and come with varied locales,
-     * versions, colours and devices; a script's bots share one client and one name pattern.
+     * At least half the burst shares one client fingerprint or has look-alike names. Regulars
+     * moving over from a crashed sibling server, which has its own trust file, have none here, and
+     * come with varied locales, versions, colours and devices; a script's bots share one client and
+     * one name pattern.
      */
     private boolean scripted() {
         for (Join j : joins) {
@@ -89,14 +110,17 @@ final class Raid {
     }
 
     /**
-     * Starts raid mode, or extends it. Returns true when this started it. One that ran out but whose
-     * end is not announced yet is extended, so every start is followed by exactly one end.
+     * Starts raid mode, or extends it. Returns true when this started it. One that ran out but
+     * whose end is not announced yet is extended, so every start is followed by exactly one end.
      */
     boolean trigger(String why, long now, long holdMs) {
         return trigger(why, now, holdMs, true);
     }
 
-    /** {@code lockVotes}: this trigger keeps votes to trusted players; one that does wins over one that does not. */
+    /**
+     * {@code lockVotes}: this trigger keeps votes to trusted players; one that does wins over one
+     * that does not.
+     */
     private boolean trigger(String why, long now, long holdMs, boolean lockVotes) {
         boolean starting = reason == null;
         if (starting) {
@@ -110,9 +134,10 @@ final class Raid {
     }
 
     /**
-     * Starts raid mode, never extends it: false while it is on, or ran out with its end not announced yet
-     * (the caller calls {@link #ended} first). How a chorus starts it: bots that passed this raid's challenge
-     * are not asked again during it and a chorus costs them nothing, so one that extended it held it on for good.
+     * Starts raid mode, never extends it: false while it is on, or ran out with its end not
+     * announced yet (the caller calls {@link #ended} first). How a chorus starts it: bots that
+     * passed this raid's challenge are not asked again during it and a chorus costs them nothing,
+     * so one that extended it held it on for good.
      */
     boolean start(String why, long now, long holdMs) {
         return reason == null && trigger(why, now, holdMs, false);

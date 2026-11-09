@@ -1,16 +1,15 @@
 package BlockIp;
 
-import arc.files.Fi;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.List;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import arc.files.Fi;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.List;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class VpnListTest {
     private static void await() throws InterruptedException {
@@ -24,7 +23,8 @@ class VpnListTest {
         Path vpn = Files.writeString(dir.resolve("vpn.txt"), "9.9.9.9");
         Fi cache = new Fi(dir.resolve("vpn-ipv4.txt").toFile());
 
-        VpnList.refresh(List.of(dc.toUri().toString(), vpn.toUri().toString()), cache, 3_600_000L, false);
+        VpnList.refresh(
+                List.of(dc.toUri().toString(), vpn.toUri().toString()), cache, 3_600_000L, false);
         await();
 
         assertTrue(VpnList.contains("1.0.0.200"));
@@ -71,7 +71,8 @@ class VpnListTest {
         Fi cache = new Fi(dir.resolve("vpn-ipv4.txt").toFile());
         cache.writeString("7.7.7.7\n");
 
-        VpnList.refresh(List.of(dir.resolve("nope.txt").toUri().toString()), cache, 3_600_000L, false);
+        VpnList.refresh(
+                List.of(dir.resolve("nope.txt").toUri().toString()), cache, 3_600_000L, false);
         await();
 
         assertTrue(VpnList.contains("7.7.7.7"));

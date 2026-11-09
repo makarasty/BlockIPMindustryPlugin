@@ -1,10 +1,10 @@
 package BlockIp;
 
-import org.junit.jupiter.api.Test;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import org.junit.jupiter.api.Test;
 
 class SessionTest {
     /** Alpha's top speed per tick. */
@@ -82,7 +82,8 @@ class SessionTest {
     @Test
     void aBuilderStandingStillCountsButOneActionAndJitterDoesNot() {
         Session s = session();
-        for (int i = 1; i <= 30; i++) s.sample(7, i % 2 == 0 ? 6 : 0, 0, SPEED, i * 2_000L, i * 2_000L);
+        for (int i = 1; i <= 30; i++)
+            s.sample(7, i % 2 == 0 ? 6 : 0, 0, SPEED, i * 2_000L, i * 2_000L);
         s.action(1);
         assertFalse(s.takeMinute(60_000), "one action and 6 units of jitter");
 
@@ -101,11 +102,13 @@ class SessionTest {
     @Test
     void steppingBackAndForthGoesNowhere() {
         Session s = session();
-        for (int i = 1; i <= 30; i++) s.sample(7, i % 2 == 0 ? 30 : 0, 0, SPEED, i * 2_000L, i * 2_000L);
+        for (int i = 1; i <= 30; i++)
+            s.sample(7, i % 2 == 0 ? 30 : 0, 0, SPEED, i * 2_000L, i * 2_000L);
         assertEquals(30f, s.minuteMoved, 0.01f, "the farthest from the start, not 870 of path");
         assertFalse(s.takeMinute(60_000));
         // Next minute measured from where the unit is: walking 40 from there counts
-        for (int i = 31; i <= 35; i++) s.sample(7, 30 + (i - 30) * 10f, 0, SPEED, i * 2_000L, i * 2_000L);
+        for (int i = 31; i <= 35; i++)
+            s.sample(7, 30 + (i - 30) * 10f, 0, SPEED, i * 2_000L, i * 2_000L);
         assertEquals(50f, s.minuteMoved, 0.01f, "from 30, where the last minute left it");
         assertTrue(s.takeMinute(120_000));
     }

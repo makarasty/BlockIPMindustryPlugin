@@ -1,7 +1,6 @@
 package BlockIp;
 
 import arc.util.Log;
-
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
@@ -11,17 +10,21 @@ import java.util.concurrent.atomic.AtomicInteger;
 /**
  * The connect filter. Arc's network thread calls it for every TCP connection before the server
  * allocates the connection's buffers, so refusing a flood here costs neither memory nor main-thread
- * time. It answers two questions, both by address alone: is this address serving a block, and has it
- * opened more connections than the window allows.
+ * time. It answers two questions, both by address alone: is this address serving a block, and has
+ * it opened more connections than the window allows.
  */
 final class FloodGuard {
     /** See {@link Tuning.FloodGuard#MAX_TRACKED}. */
     static final int MAX_TRACKED = Tuning.FloodGuard.MAX_TRACKED;
 
-    /** address -> blocked until (ms). Written by the main thread as well, when a join is refused. */
+    /**
+     * address -> blocked until (ms). Written by the main thread as well, when a join is refused.
+     */
     private static final ConcurrentHashMap<String, Long> blocked = new ConcurrentHashMap<>();
+
     /** address -> its current window. Network thread only. */
     private static final HashMap<String, Window> windows = new HashMap<>();
+
     private static long nextSweep;
 
     /** Connections refused here since the last summary; read and reset by the main thread. */
@@ -32,11 +35,11 @@ final class FloodGuard {
         int count;
     }
 
-    private FloodGuard() {
-    }
+    private FloodGuard() {}
 
     /**
-     * @param maxPerWindow connections one address may open per window; 0 or less turns rate limiting off
+     * @param maxPerWindow connections one address may open per window; 0 or less turns rate
+     *     limiting off
      */
     static boolean accept(String address, long now, int maxPerWindow, long windowMs, long blockMs) {
         Long until = blocked.get(address);
@@ -47,7 +50,8 @@ final class FloodGuard {
             }
             blocked.remove(address, until);
         }
-        // Before the limit check: blocks placed by the main thread expire even with rate limiting off
+        // Before the limit check: blocks placed by the main thread expire even with rate limiting
+        // off
         if (now >= nextSweep) sweep(now, windowMs);
         if (maxPerWindow <= 0) return true;
 
@@ -66,15 +70,24 @@ final class FloodGuard {
 
         windows.remove(address);
         if (block(address, now + blockMs)) {
-            Log.info("BlockIp: @ opened more than @ connections in @s, blocked for @s", address, maxPerWindow, windowMs / 1000, blockMs / 1000);
+            Log.info(
+                    "BlockIp: @ opened more than @ connections in @s, blocked for @s",
+                    address,
+                    maxPerWindow,
+                    windowMs / 1000,
+                    blockMs / 1000);
         }
         refused.incrementAndGet();
         return false;
     }
 
-    /** Refuses the address at accept until {@code until}. Returns false when it was blocked already or the list is full. */
+    /**
+     * Refuses the address at accept until {@code until}. Returns false when it was blocked already
+     * or the list is full.
+     */
     static boolean block(String address, long until) {
-        if (blocked.size() >= Tuning.FloodGuard.MAX_BLOCKED && !blocked.containsKey(address)) return false;
+        if (blocked.size() >= Tuning.FloodGuard.MAX_BLOCKED && !blocked.containsKey(address))
+            return false;
         Long previous = blocked.put(address, until);
         return previous == null;
     }

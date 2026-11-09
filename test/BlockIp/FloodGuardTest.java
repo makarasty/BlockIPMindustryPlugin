@@ -1,11 +1,11 @@
 package BlockIp;
 
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 class FloodGuardTest {
     private static final long WINDOW = 10_000, BLOCK = 60_000;
@@ -61,7 +61,8 @@ class FloodGuardTest {
 
     @Test
     void aFloodOfNewAddressesWithinOneWindowStaysBounded() {
-        for (int i = 0; i < FloodGuard.MAX_TRACKED * 2; i++) connect("10." + (i >> 16) + "." + ((i >> 8) & 255) + "." + (i & 255), 1);
+        for (int i = 0; i < FloodGuard.MAX_TRACKED * 2; i++)
+            connect("10." + (i >> 16) + "." + ((i >> 8) & 255) + "." + (i & 255), 1);
         assertTrue(FloodGuard.trackedCount() <= FloodGuard.MAX_TRACKED);
     }
 

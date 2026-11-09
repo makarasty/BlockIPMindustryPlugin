@@ -1,18 +1,17 @@
 package BlockIp;
 
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.stream.Stream;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.stream.Stream;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class TrustStoreTest {
     private static final long DAY = 86_400_000L;
@@ -103,7 +102,10 @@ class TrustStoreTest {
         assertEquals(0, TrustStore.load(file, 9 * DAY).size());
         assertFalse(Files.exists(file));
         try (Stream<Path> files = Files.list(dir)) {
-            assertEquals(1, files.filter(f -> f.getFileName().toString().startsWith("trust.txt.bad-")).count());
+            assertEquals(
+                    1,
+                    files.filter(f -> f.getFileName().toString().startsWith("trust.txt.bad-"))
+                            .count());
         }
     }
 
@@ -125,18 +127,21 @@ class TrustStoreTest {
     @Test
     void whenFullOfDormantVeteransFarmedUuidsEvictOnlyEachOther() {
         TrustStore store = new TrustStore();
-        // Veterans not seen since, many more of them than any scan window, then one-minute farmed uuids
+        // Veterans not seen since, many more of them than any scan window, then one-minute farmed
+        // uuids
         int veterans = 5_000;
         for (int v = 0; v < veterans; v++) {
             for (int i = 0; i < TrustStore.PROBATION_MINUTES; i++) store.active("vet" + v, v);
         }
-        for (int i = veterans; i < TrustStore.MAX_RECORDS + 20_000; i++) store.active("farmed" + i, 1_000_000 + i);
+        for (int i = veterans; i < TrustStore.MAX_RECORDS + 20_000; i++)
+            store.active("farmed" + i, 1_000_000 + i);
 
         assertEquals(TrustStore.MAX_RECORDS, store.size());
         for (int v = 0; v < veterans; v++) assertNotNull(store.get("vet" + v), "vet" + v);
         assertNull(store.get("farmed" + veterans));
         // And a probation uuid that reaches the bar is a veteran from then on, kept like one
-        for (int i = 0; i < TrustStore.PROBATION_MINUTES; i++) store.active("climber", 2_000_000 + i);
+        for (int i = 0; i < TrustStore.PROBATION_MINUTES; i++)
+            store.active("climber", 2_000_000 + i);
         for (int i = 0; i < 200_000; i++) store.active("more" + i, 3_000_000 + i);
         assertEquals(TrustStore.PROBATION_MINUTES, store.minutes("climber"));
     }
@@ -162,7 +167,8 @@ class TrustStoreTest {
         store.flag("flagged-passer-by");
         for (int i = 0; i < TrustStore.PROBATION_MINUTES; i++) store.active("veteran", DAY + i);
         store.active("recent", 40 * DAY);
-        assertEquals(DAY, store.firstSeen(50 * DAY), "about when this server started keeping trust");
+        assertEquals(
+                DAY, store.firstSeen(50 * DAY), "about when this server started keeping trust");
         Path file = dir.resolve("trust.txt");
         TrustStore.write(store.snapshot(), file);
 

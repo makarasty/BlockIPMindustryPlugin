@@ -5,7 +5,7 @@ import java.util.Arrays;
 /**
  * A set of IPv4 ranges, sorted and merged into two int arrays and searched by bisection.
  *
- * A list of ~70,000 hosting and VPN networks costs about 8 bytes a range here and a lookup is
+ * <p>A list of ~70,000 hosting and VPN networks costs about 8 bytes a range here and a lookup is
  * ~17 comparisons with no allocation, which is what a check that runs on every join can afford.
  * Addresses are stored with the sign bit flipped, so signed int order is unsigned address order.
  */
@@ -75,7 +75,8 @@ final class IpRanges {
 
         /**
          * Adds "a.b.c.d/nn" or "a.b.c.d"; anything after '#' is a comment. Returns false for a line
-         * that holds no IPv4 range (blank, comment, IPv6, junk), which the caller may count or ignore.
+         * that holds no IPv4 range (blank, comment, IPv6, junk), which the caller may count or
+         * ignore.
          */
         boolean add(String line) {
             int hash = line.indexOf('#');
@@ -100,7 +101,9 @@ final class IpRanges {
             int start = (int) ip & mask;
             int end = start | ~mask;
             if (count == packed.length) packed = Arrays.copyOf(packed, count * 2);
-            packed[count++] = ((long) (start ^ Integer.MIN_VALUE) << 32) | ((end ^ Integer.MIN_VALUE) & 0xFFFFFFFFL);
+            packed[count++] =
+                    ((long) (start ^ Integer.MIN_VALUE) << 32)
+                            | ((end ^ Integer.MIN_VALUE) & 0xFFFFFFFFL);
             return true;
         }
 

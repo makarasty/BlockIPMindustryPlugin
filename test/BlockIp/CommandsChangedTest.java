@@ -1,12 +1,15 @@
 package BlockIp;
 
-import arc.util.CommandHandler;
-import org.junit.jupiter.api.Test;
-
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** A command line guards the commands again only when a register or a removal may have left one bare. */
+import arc.util.CommandHandler;
+import org.junit.jupiter.api.Test;
+
+/**
+ * A command line guards the commands again only when a register or a removal may have left one
+ * bare.
+ */
 class CommandsChangedTest {
     @Test
     void anyRegisterOrRemovalIsSeenAndNothingElseIs() {
@@ -30,6 +33,7 @@ class CommandsChangedTest {
         plugin.sawCommands(handler.getCommandList(), config);
 
         // A config reload hands a new object, whose vote list may name other commands
-        assertTrue(plugin.commandsChanged(handler.getCommandList(), new ConfigManager.ConfigData()));
+        assertTrue(
+                plugin.commandsChanged(handler.getCommandList(), new ConfigManager.ConfigData()));
     }
 }

@@ -3,7 +3,6 @@ package BlockIp;
 import arc.files.Fi;
 import arc.util.Log;
 import arc.util.Threads;
-
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.IOException;
@@ -19,20 +18,22 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /**
  * Hosting and VPN networks, held as {@link IpRanges}.
  *
- * The lists are downloaded into one cache file beside the config and parsed from there, so a
+ * <p>The lists are downloaded into one cache file beside the config and parsed from there, so a
  * restart reads the disk instead of the network, and a failed download keeps the last good copy.
  * Downloading and parsing run on a short-lived daemon thread; the finished ranges replace the old
  * ones in one volatile write, so a join never waits on either.
  */
 final class VpnList {
-    /** Per source. The real lists are under 1 MB; anything past this is not a list of networks. Tests lower it. */
+    /**
+     * Per source. The real lists are under 1 MB; anything past this is not a list of networks.
+     * Tests lower it.
+     */
     static long maxSourceChars = Tuning.VpnList.MAX_SOURCE_CHARS;
 
     private static volatile IpRanges ranges = IpRanges.EMPTY;
     private static final AtomicBoolean loading = new AtomicBoolean();
 
-    private VpnList() {
-    }
+    private VpnList() {}
 
     static boolean contains(String address) {
         return ranges.contains(address);
@@ -48,17 +49,22 @@ final class VpnList {
      */
     static void refresh(List<String> urls, Fi cache, long maxAgeMs, boolean force) {
         if (!loading.compareAndSet(false, true)) return;
-        Threads.daemon("BlockIp-vpn-list", () -> {
-            try {
-                boolean stale = !cache.exists() || System.currentTimeMillis() - cache.lastModified() > maxAgeMs;
-                if ((force || stale) && !urls.isEmpty()) download(urls, cache);
-                if (cache.exists()) load(cache);
-            } catch (Throwable e) {
-                Log.err("BlockIp: could not load the VPN list", e);
-            } finally {
-                loading.set(false);
-            }
-        });
+        Threads.daemon(
+                "BlockIp-vpn-list",
+                () -> {
+                    try {
+                        boolean stale =
+                                !cache.exists()
+                                        || System.currentTimeMillis() - cache.lastModified()
+                                                > maxAgeMs;
+                        if ((force || stale) && !urls.isEmpty()) download(urls, cache);
+                        if (cache.exists()) load(cache);
+                    } catch (Throwable e) {
+                        Log.err("BlockIp: could not load the VPN list", e);
+                    } finally {
+                        loading.set(false);
+                    }
+                });
     }
 
     static boolean isLoading() {
@@ -78,15 +84,20 @@ final class VpnList {
                 connection.setConnectTimeout(Tuning.VpnList.CONNECT_TIMEOUT_MS);
                 connection.setReadTimeout(Tuning.VpnList.READ_TIMEOUT_MS);
                 connection.setRequestProperty("User-Agent", "BlockIp");
-                if (connection instanceof HttpURLConnection http && http.getResponseCode() / 100 != 2) {
+                if (connection instanceof HttpURLConnection http
+                        && http.getResponseCode() / 100 != 2) {
                     throw new IOException(url + " answered " + http.getResponseCode());
                 }
-                try (Reader in = new InputStreamReader(connection.getInputStream(), StandardCharsets.UTF_8)) {
+                try (Reader in =
+                        new InputStreamReader(
+                                connection.getInputStream(), StandardCharsets.UTF_8)) {
                     char[] buffer = new char[8192];
                     long total = 0;
                     for (int read; (read = in.read(buffer)) > 0; ) {
                         total += read;
-                        if (total > maxSourceChars) throw new IOException(url + " sent more than " + maxSourceChars + " characters");
+                        if (total > maxSourceChars)
+                            throw new IOException(
+                                    url + " sent more than " + maxSourceChars + " characters");
                         out.write(buffer, 0, read);
                     }
                 }

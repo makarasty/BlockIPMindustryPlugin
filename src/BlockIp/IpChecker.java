@@ -2,7 +2,6 @@ package BlockIp;
 
 import arc.util.Log;
 import com.maxmind.db.Reader;
-
 import java.net.InetAddress;
 import java.util.Map;
 
@@ -15,7 +14,8 @@ public class IpChecker {
     @SuppressWarnings("unchecked")
     public static boolean isBlocked(String ip) {
         Reader reader = ConfigManager.getDbReader();
-        // "steam:" addresses are not IP literals, and getByName would resolve them over DNS on the main thread
+        // "steam:" addresses are not IP literals, and getByName would resolve them over DNS on the
+        // main thread
         if (reader == null || ip == null || ip.startsWith("steam:")) return false;
 
         try {
@@ -23,7 +23,8 @@ public class IpChecker {
             if (result == null) return false;
 
             Map<String, Object> country = (Map<String, Object>) result.get("country");
-            return country != null && ConfigManager.isCountryBlocked((String) country.get("iso_code"));
+            return country != null
+                    && ConfigManager.isCountryBlocked((String) country.get("iso_code"));
         } catch (Exception e) {
             Log.err("BlockIp: GeoIP lookup failed for " + ip, e);
             return false;

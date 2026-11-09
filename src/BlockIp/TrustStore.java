@@ -1,7 +1,6 @@
 package BlockIp;
 
 import arc.util.Log;
-
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.IOException;
@@ -23,25 +22,31 @@ import java.util.Map;
  * uuids stable to beat playtime gates by letting bots idle; active minutes are what idling cannot
  * earn. Main thread only, except {@link #write}, which works on a {@link #snapshot}.
  *
- * A record is created only by an active minute, so a flood of fresh uuids that never moves costs no
- * memory. A flagged uuid without one sits in a smaller set of its own, so failed bots cannot push
- * real players' records out either.
+ * <p>A record is created only by an active minute, so a flood of fresh uuids that never moves costs
+ * no memory. A flagged uuid without one sits in a smaller set of its own, so failed bots cannot
+ * push real players' records out either.
  */
 final class TrustStore {
     static final int MAX_RECORDS = Tuning.Trust.MAX_RECORDS;
     static final int MAX_FLAGGED = Tuning.Trust.MAX_FLAGGED;
+
     /**
-     * Records under this many minutes are kept apart, and go first when the store is full: farming new
-     * uuids evicts other new uuids, never a veteran, so pushing one out costs a raider this many minutes.
+     * Records under this many minutes are kept apart, and go first when the store is full: farming
+     * new uuids evicts other new uuids, never a veteran, so pushing one out costs a raider this
+     * many minutes.
      */
     static final int PROBATION_MINUTES = Tuning.Trust.PROBATION_MINUTES;
+
     /**
-     * A record on probation not seen for this long is dropped at load, its flag kept: otherwise every
-     * passer-by who walked once stays for good, and the store settles at its cap, copied and written whole.
+     * A record on probation not seen for this long is dropped at load, its flag kept: otherwise
+     * every passer-by who walked once stays for good, and the store settles at its cap, copied and
+     * written whole.
      */
     static final long PROBATION_KEEP_MS = Tuning.Trust.PROBATION_KEEP_MS;
+
     private static final String HEADER = "BlockIp trust 1";
     private static final long DAY = 86_400_000L;
+
     /** One save at a time, whether from the minute's daemon thread or from exit. */
     private static final Object WRITE_LOCK = new Object();
 
@@ -65,12 +70,16 @@ final class TrustStore {
     }
 
     /**
-     * Veterans ({@link #PROBATION_MINUTES} or more) and the rest, apart. Insertion order is "least recently
-     * seen first": a uuid seen again is moved to the end. A uuid is in one of the two, never both.
+     * Veterans ({@link #PROBATION_MINUTES} or more) and the rest, apart. Insertion order is "least
+     * recently seen first": a uuid seen again is moved to the end. A uuid is in one of the two,
+     * never both.
      */
-    private final LinkedHashMap<String, Record> records = new LinkedHashMap<>(), probation = new LinkedHashMap<>();
+    private final LinkedHashMap<String, Record> records = new LinkedHashMap<>(),
+            probation = new LinkedHashMap<>();
+
     /** Flagged uuids that have no record, oldest first. */
     private final LinkedHashSet<String> flaggedOnly = new LinkedHashSet<>();
+
     private boolean dirty;
 
     Record get(String uuid) {
@@ -89,16 +98,19 @@ final class TrustStore {
         return r == null ? 0 : r.minutes;
     }
 
-    /** At least {@code minutes} active minutes over at least {@code days} days a day apart, and never flagged since. */
+    /**
+     * At least {@code minutes} active minutes over at least {@code days} days a day apart, and
+     * never flagged since.
+     */
     boolean isTrusted(String uuid, int minutes, int days) {
         Record r = get(uuid);
         return r != null && !r.flagged && r.minutes >= minutes && r.days >= days;
     }
 
     /**
-     * One active minute for {@code uuid}. Counts a new day when the last active one was another (UTC) day and a
-     * full day more has passed since the first: by date alone, one minute before midnight and the rest after it
-     * made two days, and a uuid farmed for five hours was trusted.
+     * One active minute for {@code uuid}. Counts a new day when the last active one was another
+     * (UTC) day and a full day more has passed since the first: by date alone, one minute before
+     * midnight and the rest after it made two days, and a uuid farmed for five hours was trusted.
      */
     void active(String uuid, long now) {
         Record r = remove(uuid);
@@ -163,7 +175,10 @@ final class TrustStore {
         return records.size() + probation.size();
     }
 
-    /** When the first record still kept was made: about when this server started keeping trust. {@code now} if none. */
+    /**
+     * When the first record still kept was made: about when this server started keeping trust.
+     * {@code now} if none.
+     */
     long firstSeen(long now) {
         long first = now;
         for (Record r : records.values()) first = Math.min(first, r.firstSeen);
@@ -178,7 +193,10 @@ final class TrustStore {
         return count[0];
     }
 
-    /** Past the cap, the least recently seen record on probation goes; a veteran only when there is none. */
+    /**
+     * Past the cap, the least recently seen record on probation goes; a veteran only when there is
+     * none.
+     */
     private void evictIfFull() {
         if (size() < MAX_RECORDS) return;
         Iterator<Record> it = (probation.isEmpty() ? records : probation).values().iterator();
@@ -187,8 +205,8 @@ final class TrustStore {
     }
 
     /**
-     * Null when nothing changed since the last one. Copies the records, so the write can run on another
-     * thread while this one goes on changing them.
+     * Null when nothing changed since the last one. Copies the records, so the write can run on
+     * another thread while this one goes on changing them.
      */
     List<Map.Entry<String, Record>> snapshot() {
         if (!dirty) return null;
@@ -209,7 +227,10 @@ final class TrustStore {
         dirty = true;
     }
 
-    /** Into a temp file beside {@code file}, then renamed over it, so a crash mid-write leaves the old one whole. */
+    /**
+     * Into a temp file beside {@code file}, then renamed over it, so a crash mid-write leaves the
+     * old one whole.
+     */
     static void write(List<Map.Entry<String, Record>> entries, Path file) throws IOException {
         synchronized (WRITE_LOCK) {
             Path temp = file.resolveSibling(file.getFileName() + ".tmp");
@@ -220,15 +241,29 @@ final class TrustStore {
                 for (Map.Entry<String, Record> e : entries) {
                     Record r = e.getValue();
                     line.setLength(0);
-                    line.append(e.getKey()).append(' ').append(r.minutes).append(' ').append(r.firstSeen).append(' ')
-                            .append(r.lastSeen).append(' ').append(r.days).append(' ').append(r.lastDay).append(' ')
+                    line.append(e.getKey())
+                            .append(' ')
+                            .append(r.minutes)
+                            .append(' ')
+                            .append(r.firstSeen)
+                            .append(' ')
+                            .append(r.lastSeen)
+                            .append(' ')
+                            .append(r.days)
+                            .append(' ')
+                            .append(r.lastDay)
+                            .append(' ')
                             .append(r.flagged ? 1 : 0);
                     out.write(line.toString());
                     out.newLine();
                 }
             }
             try {
-                Files.move(temp, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+                Files.move(
+                        temp,
+                        file,
+                        StandardCopyOption.REPLACE_EXISTING,
+                        StandardCopyOption.ATOMIC_MOVE);
             } catch (AtomicMoveNotSupportedException e) {
                 Files.move(temp, file, StandardCopyOption.REPLACE_EXISTING);
             }
@@ -237,8 +272,9 @@ final class TrustStore {
 
     /**
      * A missing file is an empty store. A file that does not read back - truncated, edited by hand,
-     * another format - is moved aside as {@code <name>.bad-<time>} and the store starts empty: losing
-     * the trust is better than a server that does not start, and the bad copy is kept to look at.
+     * another format - is moved aside as {@code <name>.bad-<time>} and the store starts empty:
+     * losing the trust is better than a server that does not start, and the bad copy is kept to
+     * look at.
      */
     static TrustStore load(Path file, long now) {
         TrustStore store = new TrustStore();
@@ -256,7 +292,8 @@ final class TrustStore {
                 r.days = Integer.parseInt(f[4]);
                 r.lastDay = Long.parseLong(f[5]);
                 r.flagged = "1".equals(f[6]);
-                if (r.minutes <= 0 || r.minutes < PROBATION_MINUTES && now - r.lastSeen > PROBATION_KEEP_MS) {
+                if (r.minutes <= 0
+                        || r.minutes < PROBATION_MINUTES && now - r.lastSeen > PROBATION_KEEP_MS) {
                     if (r.flagged) store.flag(f[0]);
                 } else {
                     store.evictIfFull();
@@ -266,13 +303,17 @@ final class TrustStore {
             store.dirty = false;
             return store;
         } catch (Exception e) {
-            Path aside = file.resolveSibling(file.getFileName() + ".bad-" + System.currentTimeMillis());
+            Path aside =
+                    file.resolveSibling(file.getFileName() + ".bad-" + System.currentTimeMillis());
             try {
                 Files.move(file, aside, StandardCopyOption.REPLACE_EXISTING);
             } catch (IOException moveFailed) {
                 aside = file;
             }
-            Log.err("BlockIp: the trust file did not read back (@), starting with no trust; the file is kept as @", e.toString(), aside);
+            Log.err(
+                    "BlockIp: the trust file did not read back (@), starting with no trust; the file is kept as @",
+                    e.toString(),
+                    aside);
             return new TrustStore();
         }
     }

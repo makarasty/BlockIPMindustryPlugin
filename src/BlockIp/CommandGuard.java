@@ -2,20 +2,20 @@ package BlockIp;
 
 import arc.util.CommandHandler;
 import arc.util.Log;
-
 import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.function.Predicate;
 
 /**
- * Refuses commands from some callers. Arc runs a command straight from the chat packet, with no hook
- * between the chat event and the command and without the chat filter, so the only way in is each
- * command's runner, which Arc keeps in a package-private final field. Wrapping it in place keeps the
- * command's name, order and help.
+ * Refuses commands from some callers. Arc runs a command straight from the chat packet, with no
+ * hook between the chat event and the command and without the chat filter, so the only way in is
+ * each command's runner, which Arc keeps in a package-private final field. Wrapping it in place
+ * keeps the command's name, order and help.
  *
- * Each command is wrapped once, and the wrapper holds a list of gates: guarding a command again adds
- * a gate to it instead of a wrapper around the wrapper. A plugin that registers a command again
- * (Essentials does on reload) replaces the wrapped one with a bare one, which the next call wraps.
+ * <p>Each command is wrapped once, and the wrapper holds a list of gates: guarding a command again
+ * adds a gate to it instead of a wrapper around the wrapper. A plugin that registers a command
+ * again (Essentials does on reload) replaces the wrapped one with a bare one, which the next call
+ * wraps.
  */
 final class CommandGuard {
     private static final Field RUNNER;
@@ -31,19 +31,20 @@ final class CommandGuard {
         RUNNER = field;
     }
 
-    /** Asked before the command runs; returning false refuses it, and the gate tells the caller why. */
+    /**
+     * Asked before the command runs; returning false refuses it, and the gate tells the caller why.
+     */
     @FunctionalInterface
     interface Gate {
         boolean allows(String command, String[] args, Object caller);
     }
 
-    private CommandGuard() {
-    }
+    private CommandGuard() {}
 
     /**
      * Puts {@code gate} on every command of {@code handler} whose name matches {@code names}, once:
-     * calling it again only reaches commands registered since. Returns false when the commands could
-     * not be reached.
+     * calling it again only reaches commands registered since. Returns false when the commands
+     * could not be reached.
      */
     @SuppressWarnings("unchecked")
     static boolean guard(CommandHandler handler, Predicate<String> names, Gate gate) {
@@ -55,7 +56,9 @@ final class CommandGuard {
                 if (runner instanceof Guarded guarded) {
                     if (!guarded.gates.contains(gate)) guarded.gates.add(gate);
                 } else {
-                    Guarded guarded = new Guarded(command.text, (CommandHandler.CommandRunner<Object>) runner);
+                    Guarded guarded =
+                            new Guarded(
+                                    command.text, (CommandHandler.CommandRunner<Object>) runner);
                     guarded.gates.add(gate);
                     RUNNER.set(command, guarded);
                 }

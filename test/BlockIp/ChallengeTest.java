@@ -1,6 +1,11 @@
 package BlockIp;
 
-import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.lang.reflect.Field;
 import java.util.ArrayList;
@@ -9,13 +14,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Random;
 import java.util.Set;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertSame;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import org.junit.jupiter.api.Test;
 
 class ChallengeTest {
     private static final long HOUR = 3_600_000;
@@ -34,7 +33,9 @@ class ChallengeTest {
         assertEquals(Challenge.BUTTONS, new HashSet<>(Arrays.asList(options)).size());
         assertSame(options, challenge.options("u1"));
 
-        assertEquals(Challenge.Verdict.pass, challenge.answer("u1", "1.1.1.1", indexOfWord(challenge, "u1"), 10, 24 * HOUR));
+        assertEquals(
+                Challenge.Verdict.pass,
+                challenge.answer("u1", "1.1.1.1", indexOfWord(challenge, "u1"), 10, 24 * HOUR));
         assertFalse(challenge.isPending("u1"));
         assertTrue(challenge.hasPassed("u1", "1.1.1.1", 24 * HOUR));
         assertFalse(challenge.hasPassed("u1", "1.1.1.1", 24 * HOUR + 10));
@@ -52,7 +53,9 @@ class ChallengeTest {
 
         assertEquals(Challenge.Verdict.reshow, challenge.answer("u2", "a", -1, 1, HOUR));
         assertTrue(challenge.isPending("u2"));
-        assertEquals(Challenge.Verdict.fail, challenge.answer("u2", "a", (right + 1) % Challenge.BUTTONS, 2, HOUR));
+        assertEquals(
+                Challenge.Verdict.fail,
+                challenge.answer("u2", "a", (right + 1) % Challenge.BUTTONS, 2, HOUR));
         assertFalse(challenge.isPending("u2"));
         assertFalse(challenge.hasPassed("u2", "a", 3));
         assertEquals(Challenge.Verdict.none, challenge.answer("u2", "a", right, 4, HOUR));
@@ -87,12 +90,20 @@ class ChallengeTest {
         challenge.expect("in-game", 0, true);
 
         closed.add(ghost);
-        challenge.dropNeverJoined(1_000, 180_000, c -> !closed.contains(c), (uuid, c) -> dropped.add(uuid + "@" + c));
+        challenge.dropNeverJoined(
+                1_000, 180_000, c -> !closed.contains(c), (uuid, c) -> dropped.add(uuid + "@" + c));
         assertEquals(List.of("ghost@con-ghost"), dropped, "closed before joining: dropped at once");
 
         closed.add(slow);
-        challenge.dropNeverJoined(180_001, 180_000, c -> !closed.contains(c), (uuid, c) -> dropped.add(uuid + "@" + c));
-        assertEquals(List.of("ghost@con-ghost", "stuck@con-stuck"), dropped, "still not in past the grace");
+        challenge.dropNeverJoined(
+                180_001,
+                180_000,
+                c -> !closed.contains(c),
+                (uuid, c) -> dropped.add(uuid + "@" + c));
+        assertEquals(
+                List.of("ghost@con-ghost", "stuck@con-stuck"),
+                dropped,
+                "still not in past the grace");
         assertTrue(challenge.isPending("slow"), "joined, so its own join deadline decides");
         assertTrue(challenge.isPending("in-game"));
         assertFalse(challenge.isPending("ghost"));
@@ -102,12 +113,18 @@ class ChallengeTest {
     void oneUuidFromManyConnectionsGetsOneChallenge() {
         Challenge challenge = new Challenge(new Random(8));
         assertTrue(challenge.expect("flagged", 0, false, "con1", null));
-        assertFalse(challenge.expect("flagged", 1, false, "con2", null), "still waiting on the first, which has not joined");
+        assertFalse(
+                challenge.expect("flagged", 1, false, "con2", null),
+                "still waiting on the first, which has not joined");
         assertEquals(1, challenge.pendingCount());
         challenge.dropNeverJoined(2, 180_000, c -> false, (uuid, c) -> assertEquals("con1", c));
-        assertTrue(challenge.expect("flagged", 3, false, "con2", null), "the first closed: the next may try");
+        assertTrue(
+                challenge.expect("flagged", 3, false, "con2", null),
+                "the first closed: the next may try");
         challenge.joined("flagged");
-        assertTrue(challenge.expect("flagged", 4, false, "con3", null), "one that joined can be challenged anew");
+        assertTrue(
+                challenge.expect("flagged", 4, false, "con3", null),
+                "one that joined can be challenged anew");
     }
 
     @Test
@@ -116,9 +133,17 @@ class ChallengeTest {
         List<String> dropped = new ArrayList<>();
         // Loaders that take the map and never confirm fill every place
         for (int i = 0; i < Challenge.MAX_PENDING; i++) {
-            assertTrue(challenge.expect("loader" + i, i, false, "con" + i, (uuid, c) -> dropped.add(uuid)));
+            assertTrue(
+                    challenge.expect(
+                            "loader" + i, i, false, "con" + i, (uuid, c) -> dropped.add(uuid)));
         }
-        assertTrue(challenge.expect("newcomer", 1_000, true, "con-new", (uuid, c) -> dropped.add(uuid + "@" + c)),
+        assertTrue(
+                challenge.expect(
+                        "newcomer",
+                        1_000,
+                        true,
+                        "con-new",
+                        (uuid, c) -> dropped.add(uuid + "@" + c)),
                 "a real newcomer still gets in");
         assertEquals(List.of("loader0@con0"), dropped, "the one waiting longest makes room");
         assertEquals(Challenge.MAX_PENDING, challenge.pendingCount());
@@ -127,9 +152,13 @@ class ChallengeTest {
         for (int i = 0; i < 60; i++) assertTrue(challenge.expect("player" + i, 2_000, true));
         assertEquals(1, dropped.size());
         challenge.joined("newcomer");
-        assertTrue(challenge.expect("one-more", 3_000, false, "con-more", (uuid, c) -> dropped.add(uuid)));
+        assertTrue(
+                challenge.expect(
+                        "one-more", 3_000, false, "con-more", (uuid, c) -> dropped.add(uuid)));
         assertEquals(1, dropped.size(), "the newcomer joined, which left a place");
-        assertTrue(challenge.expect("two-more", 3_000, false, "con-two", (uuid, c) -> dropped.add(uuid)));
+        assertTrue(
+                challenge.expect(
+                        "two-more", 3_000, false, "con-two", (uuid, c) -> dropped.add(uuid)));
         assertEquals(List.of("loader0@con0", "loader1"), dropped);
 
         challenge.sweep(5 * 60_000L + 2_500, 5 * 60_000L);
@@ -141,7 +170,9 @@ class ChallengeTest {
     void leavingAnOpenChallengeInGameIsFailingIt() throws ReflectiveOperationException {
         Challenge challenge = new Challenge(new Random(9));
         challenge.expect("bot", 0, true, "connection", null);
-        assertFalse(challenge.leave("bot"), "still to join: left to the sweep of those that never join");
+        assertFalse(
+                challenge.leave("bot"),
+                "still to join: left to the sweep of those that never join");
         assertTrue(challenge.isPending("bot"));
         challenge.joined("bot");
         // The deadline timer's token no longer holds the connection, closed or not
@@ -169,7 +200,9 @@ class ChallengeTest {
 
         challenge.options("raider");
         assertFalse(challenge.waitsForMove("raider"));
-        assertEquals(Challenge.Verdict.pass, challenge.answer("raider", "a", indexOfWord(challenge, "raider"), 2, HOUR));
+        assertEquals(
+                Challenge.Verdict.pass,
+                challenge.answer("raider", "a", indexOfWord(challenge, "raider"), 2, HOUR));
 
         challenge.expect("plain", 0);
         assertFalse(challenge.waitsForMove("plain"), "outside raid mode the buttons come at join");

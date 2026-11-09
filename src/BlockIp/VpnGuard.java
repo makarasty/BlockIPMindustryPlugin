@@ -5,27 +5,43 @@ import java.util.Iterator;
 import java.util.Locale;
 
 /**
- * Decides when an address on the VPN list is refused. {@code always} refuses every one; {@code auto}
- * only while the server is busy or a burst of VPN joins says an attack is on, so a player on a VPN
- * can still join a quiet server. Main thread only.
+ * Decides when an address on the VPN list is refused. {@code always} refuses every one; {@code
+ * auto} only while the server is busy or a burst of VPN joins says an attack is on, so a player on
+ * a VPN can still join a quiet server. Main thread only.
  */
 final class VpnGuard {
     enum Mode {
-        off, auto, always;
+        off,
+        auto,
+        always;
 
-        /** Lenient, so a typo in the config means the safe default rather than a reset config file. */
+        /**
+         * Lenient, so a typo in the config means the safe default rather than a reset config file.
+         */
         static Mode parse(String text) {
             if (text == null) return auto;
             switch (text.trim().toLowerCase(Locale.ROOT)) {
-                case "off": case "false": case "no": return off;
-                case "always": case "on": case "true": case "yes": return always;
-                default: return auto;
+                case "off":
+                case "false":
+                case "no":
+                    return off;
+                case "always":
+                case "on":
+                case "true":
+                case "yes":
+                    return always;
+                default:
+                    return auto;
             }
         }
     }
 
     /** Why a join was refused. */
-    enum Reason {always, busy, attack}
+    enum Reason {
+        always,
+        busy,
+        attack
+    }
 
     private static final class Join {
         final String address;
@@ -37,19 +53,23 @@ final class VpnGuard {
         }
     }
 
-    /** Recent VPN join attempts, oldest first, one per address, never more than the burst threshold. */
+    /**
+     * Recent VPN join attempts, oldest first, one per address, never more than the burst threshold.
+     */
     private final ArrayDeque<Join> recent = new ArrayDeque<>();
+
     private long attackUntil;
     private boolean started;
 
     /**
-     * Called for every join attempt from a listed address. Returns why to refuse it, or null to let it in.
+     * Called for every join attempt from a listed address. Returns why to refuse it, or null to let
+     * it in.
      *
-     * A burst is counted one per address, from every attempt attack mode did not already refuse - a busy
-     * server's refusals included, so a flood of rotating addresses at a full server still escalates. Attempts
-     * during attack mode do not count, so retrying cannot hold it open, and one player reconnecting over and
-     * over is one address, not a burst. Attack mode lasts the hold time and then ends; a new burst starts it
-     * again.
+     * <p>A burst is counted one per address, from every attempt attack mode did not already refuse
+     * - a busy server's refusals included, so a flood of rotating addresses at a full server still
+     * escalates. Attempts during attack mode do not count, so retrying cannot hold it open, and one
+     * player reconnecting over and over is one address, not a burst. Attack mode lasts the hold
+     * time and then ends; a new burst starts it again.
      */
     Reason check(ConfigManager.ConfigData config, String address, long now, int online) {
         Mode mode = config.mode();
@@ -57,7 +77,8 @@ final class VpnGuard {
         if (mode != Mode.auto) return null;
 
         if (now < attackUntil) return Reason.attack;
-        Reason otherwise = config.vpnMinPlayers > 0 && online >= config.vpnMinPlayers ? Reason.busy : null;
+        Reason otherwise =
+                config.vpnMinPlayers > 0 && online >= config.vpnMinPlayers ? Reason.busy : null;
         if (config.vpnBurstJoins <= 0) return otherwise;
 
         long window = config.vpnBurstSeconds * 1000L;

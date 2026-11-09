@@ -1,13 +1,12 @@
 package BlockIp;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import arc.util.serialization.Json;
 import arc.util.serialization.JsonReader;
 import arc.util.serialization.JsonWriter.OutputType;
 import org.junit.jupiter.api.Test;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ConfigDataTest {
     /** Configured as ConfigManager's own Json is. */
@@ -15,7 +14,8 @@ class ConfigDataTest {
         Json json = new Json(OutputType.json);
         json.setIgnoreUnknownFields(true);
         json.setUsePrototypes(false);
-        ConfigManager.ConfigData data = json.readValue(ConfigManager.ConfigData.class, new JsonReader().parse(text));
+        ConfigManager.ConfigData data =
+                json.readValue(ConfigManager.ConfigData.class, new JsonReader().parse(text));
         data.repairNulls();
         return data;
     }
@@ -23,8 +23,10 @@ class ConfigDataTest {
     @Test
     void nullsTakeTheDefaults() {
         ConfigManager.ConfigData defaults = new ConfigManager.ConfigData();
-        ConfigManager.ConfigData data = read("{\"kickText\":null,\"vpnKickText\":null,\"duplicateKickText\":null,"
-                + "\"ipWhiteList\":null,\"uuidWhiteList\":[null,\"u\"],\"blockedCountries\":null,\"vpnLists\":null}");
+        ConfigManager.ConfigData data =
+                read(
+                        "{\"kickText\":null,\"vpnKickText\":null,\"duplicateKickText\":null,"
+                                + "\"ipWhiteList\":null,\"uuidWhiteList\":[null,\"u\"],\"blockedCountries\":null,\"vpnLists\":null}");
 
         assertEquals(defaults.kickText, data.kickText);
         assertEquals(defaults.vpnKickText, data.vpnKickText);
@@ -37,8 +39,10 @@ class ConfigDataTest {
 
     @Test
     void aFileFromTheOlderBuildKeepsItsValuesAndGetsTheNewDefaults() {
-        ConfigManager.ConfigData data = read("{\"blockedCountries\":[\"RU\"],\"ipWhiteList\":[\"1.2.3.4\"],"
-                + "\"uuidWhiteList\":[],\"kickText\":\"Nope\",\"somethingElse\":1}");
+        ConfigManager.ConfigData data =
+                read(
+                        "{\"blockedCountries\":[\"RU\"],\"ipWhiteList\":[\"1.2.3.4\"],"
+                                + "\"uuidWhiteList\":[],\"kickText\":\"Nope\",\"somethingElse\":1}");
 
         assertTrue(data.blockedCountries.contains("RU"));
         assertTrue(data.ipWhiteList.contains("1.2.3.4"));
@@ -59,7 +63,8 @@ class ConfigDataTest {
     @Test
     void nullVoteSettingsTakeTheDefaults() {
         ConfigManager.ConfigData defaults = new ConfigManager.ConfigData();
-        ConfigManager.ConfigData data = read("{\"voteCommands\":null,\"voteRefusedText\":null,\"raidMoveText\":null}");
+        ConfigManager.ConfigData data =
+                read("{\"voteCommands\":null,\"voteRefusedText\":null,\"raidMoveText\":null}");
         assertEquals(defaults.voteCommands, data.voteCommands);
         assertEquals(defaults.voteRefusedText, data.voteRefusedText);
         assertEquals(defaults.raidMoveText, data.raidMoveText);

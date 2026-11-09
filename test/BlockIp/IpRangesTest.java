@@ -1,10 +1,10 @@
 package BlockIp;
 
-import org.junit.jupiter.api.Test;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import org.junit.jupiter.api.Test;
 
 class IpRangesTest {
     private static IpRanges of(String... lines) {
@@ -18,8 +18,22 @@ class IpRangesTest {
         assertEquals(0x01020304L, IpRanges.parseIpv4("1.2.3.4"));
         assertEquals(0xFFFFFFFFL, IpRanges.parseIpv4("255.255.255.255"));
         assertEquals(0L, IpRanges.parseIpv4("0.0.0.0"));
-        for (String bad : new String[]{null, "", "1.2.3", "1.2.3.4.5", "256.1.1.1", "1..2.3", ".1.2.3", "1.2.3.",
-                "::1", "2a0a:51c1::a", "steam:123", "1.2.3.4 ", "a.b.c.d"}) {
+        for (String bad :
+                new String[] {
+                    null,
+                    "",
+                    "1.2.3",
+                    "1.2.3.4.5",
+                    "256.1.1.1",
+                    "1..2.3",
+                    ".1.2.3",
+                    "1.2.3.",
+                    "::1",
+                    "2a0a:51c1::a",
+                    "steam:123",
+                    "1.2.3.4 ",
+                    "a.b.c.d"
+                }) {
             assertEquals(-1L, IpRanges.parseIpv4(bad), bad);
         }
     }
@@ -51,7 +65,14 @@ class IpRangesTest {
 
     @Test
     void mergesOverlappingAndTouchingRanges() {
-        IpRanges ranges = of("1.0.0.0/24", "1.0.1.0/24", "1.0.0.128/25", "1.0.0.5", "5.0.0.0/8", "5.1.0.0/16");
+        IpRanges ranges =
+                of(
+                        "1.0.0.0/24",
+                        "1.0.1.0/24",
+                        "1.0.0.128/25",
+                        "1.0.0.5",
+                        "5.0.0.0/8",
+                        "5.1.0.0/16");
         assertEquals(2, ranges.size());
         assertTrue(ranges.contains("1.0.1.255"));
         assertFalse(ranges.contains("1.0.2.0"));
